@@ -26,6 +26,7 @@ As a minimum numer of XAH is required to run an evernode host, this script will 
 
 ## Install & run
 
+```
 git clone https://github.com/genesis-one-seven/evernode_monitor/
 
 cd evernode_monitor
@@ -33,6 +34,8 @@ cd evernode_monitor
 cp .env.sample .env 
 
 sudo nano .env
+
+```
 
 set the variables following the instructions in the .env file
 
