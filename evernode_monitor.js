@@ -72,6 +72,7 @@ const monitor_balance = async () => {
   console.log("Monitoring the account XAH balance...");
   var sourceAccountId = accounts[0];
   var sourceAccount = null;
+  var sequence = 0;
   for (const account of accounts) {
 
 
@@ -79,6 +80,7 @@ const monitor_balance = async () => {
 
     if (sourceAccount == null) {
       sourceAccount = account_data;
+      var sequence = sourceAccount.Sequence;
     }
     else
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
@@ -93,7 +95,7 @@ const monitor_balance = async () => {
           }
         }
         else {
-
+          
           const tx = {
             TransactionType: 'Payment',
             Account: sourceAccount.Account,  //Destination account is use to fillEvernode accounts
@@ -103,7 +105,7 @@ const monitor_balance = async () => {
             DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
             Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
             NetworkID: '21337', //XAHAU Production ID
-            Sequence: sourceAccount.Sequence
+            Sequence: sequence
           }
 
           const { signedTransaction } = lib.sign(tx, keypair)
@@ -114,6 +116,8 @@ const monitor_balance = async () => {
           console.log(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
+
+          sequence ++;
 
         }
       }
