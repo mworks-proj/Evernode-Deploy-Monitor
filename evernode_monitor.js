@@ -315,7 +315,6 @@ async function sendMail(subject, text) {
 }
 
 const main = async () => {
-  console.log(run_evr_withdrawal);
   if(run_evr_withdrawal) {await transfer_funds()};
   if(run_heartbeat_monitor) await monitor_heartbeat();
   if(run_xah_balance_monitor) await monitor_balance();

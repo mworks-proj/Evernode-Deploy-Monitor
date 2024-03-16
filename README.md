@@ -38,13 +38,15 @@ sudo nano .env
 
 set the variables following the instructions in the .env file
 
+```
 npm install
 
 node evernode_monitor.js
+```
 
 *use at your own risk - double check all fields point to YOUR addresses that you CONTROL*
 
-To set a scheduled task to do this use cron, the example below runs the transfer script every 4 hours and logs the results to a file called log.log
+You can use cron to setup a scheduled task. The example below runs the transfer script every 4 hours and logs the results to a file called log.log
 
 crontab -e
 
