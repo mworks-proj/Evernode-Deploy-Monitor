@@ -50,7 +50,7 @@ You can use cron to setup a scheduled task. The example below runs the transfer 
 
 crontab -e
 
-* */4 * * * /usr/bin/node /root/evernode_monitor/transfer_funds.js >> /root/evernode_monitor/log.log
+* */4 * * * /usr/bin/node /root/evernode_monitor/evernode_monitor.js >> /root/evernode_monitor/log.log
 
 Here's some good cron documentation: https://www.cherryservers.com/blog/how-to-use-cron-to-automate-linux-jobs-on-ubuntu-20-04
 
