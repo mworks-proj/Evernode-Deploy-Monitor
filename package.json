@@ -1,7 +1,9 @@
 {
     "dependencies": {
-      "xrpl-accountlib": "^3.2.9",
-      "xrpl-client": "^2.3.1",
-      "dotenv": "^16.4.1"
+        "dotenv": "^16.4.1",
+        "fs": "^0.0.1-security",
+        "nodemailer": "^6.9.12",
+        "xrpl-accountlib": "^3.2.9",
+        "xrpl-client": "^2.3.1"
     }
-  }
+}
