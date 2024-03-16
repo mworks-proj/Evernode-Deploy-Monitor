@@ -34,12 +34,9 @@ cd evernode_monitor
 cp .env.sample .env 
 
 sudo nano .env
-
 ```
 
 set the variables following the instructions in the .env file
-
-For other fields look in the .env.sample file
 
 npm install
 
