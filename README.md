@@ -1,5 +1,12 @@
-# EVERNODE_WITHDRAW
-Script to withdraw EVR rewards from one or more Evernode nodes.
+# Evernode monitor
+
+Script to monitor your evernodes hosts.
+
+It his made of three modules:
+
+1. Withdraw EVRs from your node accounts to your first account
+2. Monitor the heartbeat of all yor nodes and send an alert email in case no heartbeat where sent in the last N (configurable) minutes.
+3. Send N (configurable) XAH to your Evernode accounts when the balance is below a certain threshold (configurable) 
 
 This Script will cycle through an array of addresses, get their EVR balance then send all of the EVR balance to a single receiving address with TAG. This script is designed to use a single signing address where all nodes have set their Regular Key to the signing address of an active account in Xaman or other wallet that you control.
 
