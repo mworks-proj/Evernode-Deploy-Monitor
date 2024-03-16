@@ -34,6 +34,10 @@ const accounts = process.env.accounts.split('\n');
 const secret = process.env.secret;
 const keypair = lib.derive.familySeed(secret)
 
+const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
+const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
+const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
+
 //connect to xahau blockchain WSS server
 const xahaud = process.env.xahaud;
 const client = new XrplClient(xahaud);
@@ -311,9 +315,10 @@ async function sendMail(subject, text) {
 }
 
 const main = async () => {
-  await transfer_funds();
-  await monitor_heartbeat();
-  await monitor_balance();
+  console.log(run_evr_withdrawal);
+  if(run_evr_withdrawal) {await transfer_funds()};
+  if(run_heartbeat_monitor) await monitor_heartbeat();
+  if(run_xah_balance_monitor) await monitor_balance();
   console.log('Shutting down...');
 
   client.close()
