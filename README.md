@@ -6,7 +6,7 @@ If you have many nodes, using this script you will have to check only one accoun
 
 It is made of 3 modules:
 
-1. Withdraw all EVRs from your node accounts to your first account.
+1. Move all EVRs from your node accounts to your first account.
 2. Monitor the heartbeat of all your nodes and send an alert email in case no heartbeat was sent in the last N (configurable) minutes.
 3. Send a few XAH to your Evernode accounts when the balance is below a certain threshold (configurable).
 
