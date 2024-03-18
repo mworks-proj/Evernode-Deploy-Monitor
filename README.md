@@ -25,7 +25,7 @@ Setting the same regular key on a Xahau account list will let you sign the trans
 
 ## 2. Monitor the heartbeat
 
-This script cycles through your accounts and checks whether each account sent a heartbeat transaction in the last N (configurable) minutes. In case no heartbeat is found an alert email is sent to the configured email address. The alert email is repeated after N (configurable) minutes in case the down is not solved. A restore email is sent a soon as the issue is solved.
+This script cycles through your accounts and checks whether each account sent a heartbeat transaction in the last N (configurable) minutes. In case no heartbeat is found an alert email is sent to the configured email address. The alert email is repeated after N (configurable) minutes in case the down is not solved. A restore email is sent as soon as the issue is solved.
 
 ## 3. Send XAH to the account if balance is too low
 
