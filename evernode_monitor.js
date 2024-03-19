@@ -1,44 +1,32 @@
-// MAIN file to send EVR to XAHAU Wallet
-
-// This Script will cycle through an array of addresses, get their EVR balance
-// then send all of the EVR balance to a single receiving address with TAG.
-// This script is designed to use a single signing address where all nodes
-// have set their Regular Key to the signing address.
-// To set the Regular Key for a node..on each node issue the command from the terminal
-// $ evernode regkey set rWalletAddressThatYouOwnThatCanSignTransactions, 
-// the secret for this address is set below
-
-//create client to connect to xahau blockchain RPC server
 const { XrplClient } = require('xrpl-client')
 const lib = require('xrpl-accountlib');
 const { exit } = require('process');
-//const path = require('path')
 
 const fs = require('fs')
 const { createTransport } = require('nodemailer');
 
 
-//get variables from .env files
-//const env = require("dotenv").config({path:".env"});
-//const env = require("dotenv").config({path: __dirname + '.env'})
 const path = require('path');
 const { ALPN_ENABLED } = require('constants');
+const { Console } = require('console');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 
-//accounts = your Node Wallets r Addresses 
-//replace with one or more of your rAddresses for each node in .env file
 const accounts = process.env.accounts.split('\n');
 
-//Signing Wallet which is set as Regular Key for all Nodes
-//set secret in .env file from regular key set for nodes
+const evrDestinationAccount = process.env.evrDestinationAccount;
+
+const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
+
+const xahSourceAccount = process.env.xahSourceAccount;
+
 const secret = process.env.secret;
+lib.derive.familySeed(secret);
 const keypair = lib.derive.familySeed(secret)
 
 const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
 const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
 const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
 
-//connect to xahau blockchain WSS server
 const xahaud = process.env.xahaud;
 const client = new XrplClient(xahaud);
 
@@ -70,24 +58,26 @@ const myDate = new Date().toUTCString();
 const monitor_balance = async () => {
 
   console.log("Monitoring the account XAH balance...");
+
   var sourceAccountId = accounts[0];
   var sourceAccount = null;
   var sequence = 0;
+
+
   for (const account of accounts) {
+    
+    const { account_data } = await client.send({ command: "account_info", account: account });
+     
+    var sourceData  = await client.send({ command: "account_info", account: xahSourceAccount });
+    
+    var sequence = sourceData.account_data.Sequence;
 
-
-    const { account_data } = await client.send({ command: "account_info", account });
-
-    if (sourceAccount == null) {
-      sourceAccount = account_data;
-      var sequence = sourceAccount.Sequence;
-    }
-    else
+    if (account != xahSourceAccount) {
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
         const filePath = "./balanceLow-" + account + ".txt";
-        console.log("Account balance for " + sourceAccount.Account + " is " + account_data.Balance + ", sending funds");
-        console.log("Source account balance = " + sourceAccount.Balance);
-        if (sourceAccount.Balance < xah_balance_threshold) {
+        console.log("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
+        console.log("Source account balance = " + sourceData.account_data.Balance);
+        if (sourceData.account_data.Balance < xah_balance_threshold) {
           console.log("Not enough funds in first account to fill other accounts");
           if (!fs.existsSync(filePath)) {
             await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + sourceAccount.Account + " is too low.\r\n\r\nPlease feed your source account.");
@@ -95,10 +85,10 @@ const monitor_balance = async () => {
           }
         }
         else {
-          
+
           const tx = {
             TransactionType: 'Payment',
-            Account: sourceAccount.Account,  //Destination account is use to fillEvernode accounts
+            Account: xahSourceAccount,  //Destination account is use to fillEvernode accounts
             Amount: (refill_amount).toString(),
             //Destination: 'rYourWalletYouControl'
             Destination: account_data.Account, //the account that has to be filled
@@ -117,21 +107,19 @@ const monitor_balance = async () => {
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
 
-          sequence ++;
+          sequence++;
 
         }
       }
 
+    }
   }
 }
 
 const transfer_funds = async () => {
-  console.log("Transferring funds...");
-  var destination = "";
+  console.log("Starting the funds transfer batch...");
   for (const account of accounts) {
-    if (destination == "")
-      destination = account;
-    else {
+    if (account != evrDestinationAccount) {
       const { account_data } = await client.send({ command: "account_info", account })
       //console.log('Printing Account INFO...');
 
@@ -187,8 +175,8 @@ const transfer_funds = async () => {
           "issuer": "rEvernodee8dJLaFsujS6q1EiXvZYmHXr8" //DO NOT CHANGE - this is the EVR Trustline Issuer address
         },
         //Destination: 'rYourWalletYouControl'
-        Destination: destination, //your exchnage or xaman wallet address
-        DestinationTag: tag, //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
+        Destination: evrDestinationAccount, //your exchnage or xaman wallet address
+        DestinationTag: evrDestinationAccountTag, //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
         Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
         NetworkID: '21337', //XAHAU Production ID
         Sequence: account_data.Sequence
@@ -309,6 +297,11 @@ async function sendMail(subject, text) {
     text: text
   };
   console.log("SENDING MAIL " + JSON.stringify(mailOptions));
+
+  if (!smtpEmail) {
+    console.log("smtp email not set in .env file. Email is not sent");
+    return;
+  }
   transporter.sendMail(mailOptions, function (error, info) {
     if (error) {
       console.log(error);
@@ -318,10 +311,26 @@ async function sendMail(subject, text) {
   });
 }
 
+function validate() {
+  if (!accounts || accounts.length == 0 || accounts[0] == "") {
+    console.log("no accounts set in .env file.");
+    return false;
+  }
+  if (!secret && (run_evr_withdrawal || run_xah_balance_monitor)) {
+    console.log("secret not set in .env file.");
+    return false;
+  }
+  return true;
+}
+
 const main = async () => {
-  if(run_evr_withdrawal) {await transfer_funds()};
-  if(run_heartbeat_monitor) await monitor_heartbeat();
-  if(run_xah_balance_monitor) await monitor_balance();
+  var valid = validate();
+  if (valid) {
+    if (run_evr_withdrawal) { await transfer_funds() };
+    if (run_heartbeat_monitor) await monitor_heartbeat();
+    if (run_xah_balance_monitor) await monitor_balance();
+  }
+
   console.log('Shutting down...');
 
   client.close()
