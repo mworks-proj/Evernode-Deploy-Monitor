@@ -37,9 +37,9 @@ In order to send emails from the script you need an SMTP server. Follow these in
 
 ## Install & run
 
-Install the latest node.js version in your server:
+First you need to ensure you have the latest version of node.js in your server (https://github.com/nodesource/distributions)
 
-https://github.com/nodesource/distributions
+Then you can download and configure the script:
 
 ```
 git clone https://github.com/genesis-one-seven/evernode_monitor/
