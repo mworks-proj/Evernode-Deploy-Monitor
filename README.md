@@ -1,6 +1,6 @@
 # Evernode monitor
 
-Script to monitor your evernodes hosts. 
+This script will help you in the monitoring of your evernodes hosts. 
 
 If you have many nodes, using this script you will have to check only one account instead of all of them.
 
@@ -36,6 +36,10 @@ As a minimum numer of XAH is required to run an evernode host, this script sends
 In order to send emails from the script you need an SMTP server. Follow these instruction to setup your free account in BREVO: https://www.programonaut.com/how-to-send-an-email-in-node-js-using-an-smtp-step-by-step/. 
 
 ## Install & run
+
+Install the latest node.js version in your server:
+
+https://github.com/nodesource/distributions
 
 ```
 git clone https://github.com/genesis-one-seven/evernode_monitor/
