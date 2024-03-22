@@ -11,6 +11,19 @@ const { ALPN_ENABLED } = require('constants');
 const { Console } = require('console');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 
+const verboseLog = process.env.verboseLog == "true";
+
+const logVerbose = (msg) =>
+{
+    if(verboseLog)
+    {
+        console.log(msg)
+    }
+}
+
+logVerbose("Original account string = " + process.env.accounts);
+logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
+
 const accounts = process.env.accounts.split('\n');
 
 const evrDestinationAccount = process.env.evrDestinationAccount;
@@ -116,10 +129,15 @@ const monitor_balance = async () => {
   }
 }
 
+
+
 const transfer_funds = async () => {
   console.log("Starting the funds transfer batch...");
+  
   for (const account of accounts) {
+    logVerbose("start the transferring process on account " + account);
     if (account != evrDestinationAccount) {
+      logVerbose("getting account data on account " + account);
       const { account_data } = await client.send({ command: "account_info", account })
       //console.log('Printing Account INFO...');
 
@@ -166,6 +184,7 @@ const transfer_funds = async () => {
       const tag = process.env.tag;
 
       //send all funds to your chosen Exchange, Xaman or other Xahau account 
+      logVerbose("preparing the payment transaction on account " + account);
       const tx = {
         TransactionType: 'Payment',
         Account: account,
@@ -181,11 +200,12 @@ const transfer_funds = async () => {
         NetworkID: '21337', //XAHAU Production ID
         Sequence: account_data.Sequence
       }
-
+      logVerbose("signing the transaction on account " + account);
       const { signedTransaction } = lib.sign(tx, keypair)
       console.log(tx)
 
       //SUBmit sign TX to ledger
+      logVerbose("sending the EVR payment transation on account " + account);
       const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
       console.log(submit.engine_result, submit.engine_result_message, submit.tx_json.hash)
 
@@ -197,6 +217,7 @@ const transfer_funds = async () => {
 const monitor_heartbeat = async () => {
   console.log("Checking account heartbeat...");
   for (const account of accounts) {
+    logVerbose("checking account heartbeat on account " + account);
     await checkAccountHeartBeat(account);
   }
 }
@@ -213,7 +234,7 @@ async function checkAccountHeartBeat(account) {
   var date_failure = new Date();
   if (accountFailed) {
     date_failure = Date.parse(fs.readFileSync(path, 'utf8'));
-
+    logVerbose("account " + account + " is in status failed since " + date_failure);
     const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
     if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
       accountFailed = false;
@@ -235,7 +256,7 @@ async function checkAccountHeartBeat(account) {
         "forward": false, marker: marker === '' ? undefined : marker
       })
       marker = response?.marker === marker ? null : response?.marker
-      // It gets the last 10 transactions and looks for the last heartbeat
+      // It gets the last 5 transactions and looks for the last heartbeat
       var i = 0;
       for (var tIndex = 0; tIndex < response.transactions.length; tIndex++) {
         var transaction = response.transactions[tIndex];
