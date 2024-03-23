@@ -63,8 +63,6 @@ const transporter = createTransport({
 
 const heartbeatAccount = process.env.heartbeatAccount;
 
-const wallets = []
-
 const myDate = new Date().toUTCString();
 
 
@@ -153,29 +151,23 @@ const transfer_funds = async () => {
       var balance = 0
       while (typeof marker === 'string') {
         const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
+
         marker = lines?.marker === marker ? null : lines?.marker
         //console.log(`Got ${lines.lines.length} results`)
         lines.lines.forEach(t => {
+          if(t.currency=="EVR")
+          {
+            logVerbose(JSON.stringify(t))
 
-          //t is the details for the EVR trustline to evernode and the balance
-          //console.log(account,',',t.balance)
+            balance = balance + t.balance
 
-          l.push(t.account) // t.account = evernode wallet trustline issuer NOT USED
-          wallets.push(account, t.balance)
-
-          balance = t.balance
+          }
         })
-      }
-
-      //check just the EVRs trustline is set
-      if (l.length > 1) {
-        //console.log('# TOO MANY Trust Lines:', l.length, '\n\n')
-        exit();
       }
 
       //check just the EVRs balance is > 0 if not go to start of for loop with continue
       if (balance <= 0) {
-        //console.log('# Evr Balance TOO LOW:', balance)
+        logVerbose('# Evr Balance TOO LOW in account ' + account);
         continue;
       }
 
@@ -184,7 +176,7 @@ const transfer_funds = async () => {
       const tag = process.env.tag;
 
       //send all funds to your chosen Exchange, Xaman or other Xahau account 
-      logVerbose("preparing the payment transaction on account " + account);
+      logVerbose("Balance = " + balance + ", preparing the payment transaction on account " + account);
       const tx = {
         TransactionType: 'Payment',
         Account: account,
