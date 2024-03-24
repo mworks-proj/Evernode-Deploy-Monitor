@@ -1,18 +1,23 @@
 # Evernode monitor
 
-This script will help you in the monitoring of your evernodes hosts. 
+This nodejs script (requires v20.11.1) will help you in the monitoring of your evernodes hosts. 
+
 
 If you have many nodes, using this script you will have to check only one account instead of all of them.
 
 It is made of 3 modules:
 
-1. Move all EVRs from your node accounts to your first account.
+1. Move all EVRs from your node accounts to a single account.
 2. Monitor the heartbeat of all your nodes and send an alert email in case no heartbeat was sent in the last N (configurable) minutes.
 3. Send a few XAH to your Evernode accounts when the balance is below a certain threshold (configurable).
 
+The hub accounts can be one of your evernode accounts or another one of your choice. 
+
+The EVR destinaton account can be an exchange. 
+
 ## 1. Withdraw EVRs
 
-This script cycles through your accounts, gets their EVR balance and sends all of the EVR balance to your first EVR account (that is of course skipped). 
+This script cycles through your accounts, gets their EVR balance and sends all of the EVR balance to your first EVR account. 
 This script uses a single signing address, that requires the same Regular Key is set on all accounts.
  
 To set the Regular Key for a node, open the Linux terminal and run the following command: 
