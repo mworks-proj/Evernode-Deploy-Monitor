@@ -73,5 +73,24 @@ crontab -e
 
 Cron documentation: https://www.cherryservers.com/blog/how-to-use-cron-to-automate-linux-jobs-on-ubuntu-20-04
 
+## Update to last version
+
+In order to update the script to the last version without losing your configuration, first go in evernode_monitor folder:
+
+```
+cd evernode_monitor
+```
+
+then give execute permission to the script:
+
+```
+chmod +x update.sh
+```
+
+and finally execute the script update.sh:
+
+```
+sudo ./update.sh
+```
 
 ## Use at your own risk. Double check your addresses before running the script!
