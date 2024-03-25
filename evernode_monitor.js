@@ -85,7 +85,7 @@ const monitor_balance = async () => {
 
     if (account != xahSourceAccount) {
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
-        const filePath = "./balanceLow-" + account + ".txt";
+        const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
         console.log("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
         console.log("Source account balance = " + sourceData.account_data.Balance);
         if (sourceData.account_data.Balance < xah_balance_threshold) {
@@ -221,11 +221,11 @@ function getMinutesBetweenDates(startDate, endDate) {
 
 async function checkAccountHeartBeat(account) {
   var ledgerIndex = -1;
-  const path = './.' + account + '.txt'
-  var accountFailed = fs.existsSync(path);
+  const filePath = path.resolve(__dirname,  account + '.txt');
+  var accountFailed = fs.existsSync(filePath);
   var date_failure = new Date();
   if (accountFailed) {
-    date_failure = Date.parse(fs.readFileSync(path, 'utf8'));
+    date_failure = Date.parse(fs.readFileSync(filePath, 'utf8'));
     logVerbose("account " + account + " is in status failed since " + date_failure);
     const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
     if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
@@ -262,30 +262,30 @@ async function checkAccountHeartBeat(account) {
           date.getUTCMinutes(), date.getUTCSeconds());
         if (now_utc - utcMilliseconds > 1000 * 60 * minutes_from_last_heartbeat_alert_threshold) {
           console.log("Handling failure for too old heartbeat transaction, account failed = " + accountFailed);
-          await handleFailure(account, accountFailed, path);
+          await handleFailure(account, accountFailed, filePath);
           return;
         }
         if (transaction.tx.Destination == heartbeatAccount) {
           //console.log("System running regularly " + account + "");
-          if (fs.existsSync(path)) {
+          if (fs.existsSync(filePath)) {
             await sendSuccess(account);
-            fs.rmSync(path);
+            fs.rmSync(filePath);
           }
           return;
         }
       }
       if (response.transactions.length < 5) {
         console.log("Handling failure for no heartbeat transactions, account failed = " + accountFailed);
-        await handleFailure(account, accountFailed, path);
+        await handleFailure(account, accountFailed, filePath);
       }
     }
   }
 }
 
-async function handleFailure(account, accountFailed, path) {
+async function handleFailure(account, accountFailed, filePath) {
   if (!accountFailed) {
     await sendFailure(account);
-    fs.writeFileSync(path, new Date().toString())
+    fs.writeFileSync(filePath, new Date().toString())
   }
   console.log("ALERT, SYSTEM STOPPED " + account);
 }
