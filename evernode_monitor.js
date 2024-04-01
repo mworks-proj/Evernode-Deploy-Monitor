@@ -25,6 +25,7 @@ logVerbose("Original account string = " + process.env.accounts);
 logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
 
 const accounts = process.env.accounts.split('\n');
+const xahaudServers = process.env.xahaudServers.split('\n');
 
 const evrDestinationAccount = process.env.evrDestinationAccount;
 
@@ -32,13 +33,17 @@ const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
 
 const xahSourceAccount = process.env.xahSourceAccount;
 
-const secret = process.env.secret;
-lib.derive.familySeed(secret);
-const keypair = lib.derive.familySeed(secret)
-
+const secret = "";
+if(secret)
+{
+  secret = process.env.secret;
+  lib.derive.familySeed(secret);
+  const keypair = lib.derive.familySeed(secret)
+}
 const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
 const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
 const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
+const run_xahaud_monitor = process.env.run_xahaud_monitor == "true";
 
 const xahaud = process.env.xahaud;
 const client = new XrplClient(xahaud);
@@ -127,8 +132,6 @@ const monitor_balance = async () => {
   }
 }
 
-
-
 const transfer_funds = async () => {
   console.log("Starting the funds transfer batch...");
   
@@ -137,15 +140,7 @@ const transfer_funds = async () => {
     if (account != evrDestinationAccount) {
       logVerbose("getting account data on account " + account);
       const { account_data } = await client.send({ command: "account_info", account })
-      //console.log('Printing Account INFO...');
-
-      //console.log(account); //print address
-      //console.log(account_data); // FULL Output
-
-      ////GET Trustline Details - Get EVR Balance
-      // Ensure only ONE Trustline per node wallet which is set to EVERNODE
-      // currency: EVR
-      // issuer: rEvernodee8dJLaFsujS6q1EiXvZYmHXr8
+     
       let marker = ''
       const l = []
       var balance = 0
@@ -217,6 +212,31 @@ const monitor_heartbeat = async () => {
 function getMinutesBetweenDates(startDate, endDate) {
   const diff = endDate - startDate;
   return (diff / 60000);
+}
+
+const monitor_xahaud_nodes = async () => {
+  console.log("Monitoring xahaud nodes...");
+  for (const xahaudServer of xahaudServers) {
+    var xahaudClient = new XrplClient(xahaudServer,{
+      assumeOfflineAfterSeconds: 2, connectAttemptTimeoutSeconds:2
+    });
+    logVerbose("pinging xahaud node " + xahaudServer);
+    const tx = {
+      "id": 1,
+      "command": "ping"
+    }
+    try {
+      var result = await xahaudClient.send({ command: "ping", id: 1 }, {timeoutSeconds:2});
+      logVerbose("successfully pinged xahaud node " + xahaudServer);
+      xahaudClient.close();
+    }
+    catch(error)
+    {
+        var message = `A en error has occured while checking  ${xahaudServer}\n\nError message: ${error.message}`;
+        console.log(message);
+        await sendMail('Failure in checking Xahaud node', message);
+    }
+  }
 }
 
 async function checkAccountHeartBeat(account) {
@@ -315,7 +335,8 @@ async function sendMail(subject, text) {
     console.log("smtp email not set in .env file. Email is not sent");
     return;
   }
-  transporter.sendMail(mailOptions, function (error, info) {
+  
+  await transporter.sendMail(mailOptions, function (error, info) {
     if (error) {
       console.log(error);
     } else {
@@ -333,6 +354,11 @@ function validate() {
     console.log("secret not set in .env file.");
     return false;
   }
+  if (!xahaudServers || xahaudServers.length == 0 || xahaudServers[0] == "") {
+    console.log("no xahaud servers set in .env file.");
+    return false;
+  }
+
   return true;
 }
 
@@ -342,12 +368,14 @@ const main = async () => {
     if (run_evr_withdrawal) { await transfer_funds() };
     if (run_heartbeat_monitor) await monitor_heartbeat();
     if (run_xah_balance_monitor) await monitor_balance();
+    if (run_xahaud_monitor) await monitor_xahaud_nodes();
   }
-
+  client.close();
   console.log('Shutting down...');
-
-  client.close()
+  //Workaround so all emails are sent
+  setTimeout(function() {
+    exit();
+  }, 10000);
 };
 
 main()
-
