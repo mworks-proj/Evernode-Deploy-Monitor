@@ -56,6 +56,8 @@ const refill_amount = process.env.refill_amount * 1000000;
 const smtpKey = process.env.smtpKey;
 const smtpEmail = process.env.smtpEmail;
 
+const destinationEmail = process.env.destinationEmail || process.env.smtpEmail;
+
 const transporter = createTransport({
   host: "smtp-relay.sendinblue.com",
   port: 587,
@@ -325,7 +327,7 @@ async function sendSuccess(account) {
 async function sendMail(subject, text) {
   var mailOptions = {
     from: smtpEmail,
-    to: smtpEmail,
+    to: desti smtpEmail,
     subject: subject,
     text: text
   };
