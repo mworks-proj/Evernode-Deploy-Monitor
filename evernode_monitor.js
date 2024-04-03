@@ -23,7 +23,7 @@ logVerbose("Original account string = " + process.env.accounts);
 logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
 
 const accounts = process.env.accounts.split('\n');
-const xahaudServers = process.env.xahaudServers.split('\n');
+const xahaudServers = [];
 
 const evrDestinationAccount = process.env.evrDestinationAccount;
 
@@ -31,16 +31,19 @@ const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
 
 const xahSourceAccount = process.env.xahSourceAccount;
 
-const secret = "";
-if (secret) {
+var secret = "";
+var keypair;
+if (process.env.secret) {
   secret = process.env.secret;
   lib.derive.familySeed(secret);
-  const keypair = lib.derive.familySeed(secret)
+  keypair = lib.derive.familySeed(secret)
 }
 const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
 const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
 const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
 const run_xahaud_monitor = process.env.run_xahaud_monitor == "true";
+
+logVerbose("run_xahaud_monitor = " + run_xahaud_monitor);
 
 const xahaud = process.env.xahaud;
 const client = new XrplClient(xahaud);
@@ -160,7 +163,7 @@ const transfer_funds = async () => {
 
       //check just the EVRs balance is > 0 if not go to start of for loop with continue
       if (balance <= 0) {
-        logVerbose('# Evr Balance TOO LOW in account ' + account);
+        logVerbose('# Evr Balance is zero in account ' + account);
         continue;
       }
 
@@ -214,7 +217,7 @@ function getMinutesBetweenDates(startDate, endDate) {
 
 const monitor_xahaud_nodes = async () => {
   console.log("Monitoring xahaud nodes...");
-
+  xahaudServers = process.env.xahaudServers.split('\n');
   for (const xahaudServer of xahaudServers) {
     const filePath = path.resolve(__dirname, btoa(xahaudServer) + '_xahaud.txt');
     var serverFailed = fs.existsSync(filePath);
@@ -372,7 +375,7 @@ function validate() {
     console.log("secret not set in .env file.");
     return false;
   }
-  if (!xahaudServers || xahaudServers.length == 0 || xahaudServers[0] == "") {
+  if ( run_xahaud_monitor && !process.env.xahaudServers) {
     console.log("no xahaud servers set in .env file.");
     return false;
   }
@@ -390,7 +393,6 @@ const main = async () => {
   }
   client.close();
   console.log('Shutting down...');
-  
   // Workaround so all queued emails are sent. 
   // I had to explicitly call the exit() function as the application was not stopping 
   // in case of Xahaud request failure, I don't know why. 
