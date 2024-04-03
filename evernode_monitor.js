@@ -13,12 +13,10 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 
 const verboseLog = process.env.verboseLog == "true";
 
-const logVerbose = (msg) =>
-{
-    if(verboseLog)
-    {
-        console.log(msg)
-    }
+const logVerbose = (msg) => {
+  if (verboseLog) {
+    console.log(msg)
+  }
 }
 
 logVerbose("Original account string = " + process.env.accounts);
@@ -34,8 +32,7 @@ const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
 const xahSourceAccount = process.env.xahSourceAccount;
 
 const secret = "";
-if(secret)
-{
+if (secret) {
   secret = process.env.secret;
   lib.derive.familySeed(secret);
   const keypair = lib.derive.familySeed(secret)
@@ -83,11 +80,11 @@ const monitor_balance = async () => {
 
 
   for (const account of accounts) {
-    
+
     const { account_data } = await client.send({ command: "account_info", account: account });
-     
-    var sourceData  = await client.send({ command: "account_info", account: xahSourceAccount });
-    
+
+    var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
+
     var sequence = sourceData.account_data.Sequence;
 
     if (account != xahSourceAccount) {
@@ -136,13 +133,13 @@ const monitor_balance = async () => {
 
 const transfer_funds = async () => {
   console.log("Starting the funds transfer batch...");
-  
+
   for (const account of accounts) {
     logVerbose("start the transferring process on account " + account);
     if (account != evrDestinationAccount) {
       logVerbose("getting account data on account " + account);
       const { account_data } = await client.send({ command: "account_info", account })
-     
+
       let marker = ''
       const l = []
       var balance = 0
@@ -152,8 +149,7 @@ const transfer_funds = async () => {
         marker = lines?.marker === marker ? null : lines?.marker
         //console.log(`Got ${lines.lines.length} results`)
         lines.lines.forEach(t => {
-          if(t.currency=="EVR")
-          {
+          if (t.currency == "EVR") {
             logVerbose(JSON.stringify(t))
 
             balance = balance + t.balance
@@ -218,9 +214,22 @@ function getMinutesBetweenDates(startDate, endDate) {
 
 const monitor_xahaud_nodes = async () => {
   console.log("Monitoring xahaud nodes...");
+
   for (const xahaudServer of xahaudServers) {
-    var xahaudClient = new XrplClient(xahaudServer,{
-      assumeOfflineAfterSeconds: 2, connectAttemptTimeoutSeconds:2
+    const filePath = path.resolve(__dirname, btoa(xahaudServer) + '_xahaud.txt');
+    var serverFailed = fs.existsSync(filePath);
+    var date_failure = new Date();
+    
+    if (serverFailed) {
+      date_failure = Date.parse(fs.readFileSync(filePath, 'utf8'));
+      logVerbose("xahaud server " + xahaudServer + " is in status failed since " + date_failure);
+      const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
+      if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
+        serverFailed = false;
+      }
+    }
+    var xahaudClient = new XrplClient(xahaudServer, {
+      assumeOfflineAfterSeconds: 2, connectAttemptTimeoutSeconds: 2
     });
     logVerbose("pinging xahaud node " + xahaudServer);
     const tx = {
@@ -228,22 +237,29 @@ const monitor_xahaud_nodes = async () => {
       "command": "ping"
     }
     try {
-      var result = await xahaudClient.send({ command: "ping", id: 1 }, {timeoutSeconds:2});
+      var result = await xahaudClient.send({ command: "ping", id: 1 }, { timeoutSeconds: 2 });
       logVerbose("successfully pinged xahaud node " + xahaudServer);
       xahaudClient.close();
+      if (fs.existsSync(filePath)) {
+        await sendMail('Xahaud node restored', 'Xahaud node ' + xahaudServer + ' restored');
+        fs.rmSync(filePath);
+      }
     }
-    catch(error)
-    {
-        var message = `A en error has occured while checking  ${xahaudServer}\n\nError message: ${error.message}`;
-        console.log(message);
-        await sendMail('Failure in checking Xahaud node', message);
+    catch (error) {
+      var message = `A en error has occured while checking  ${xahaudServer}\n\nError message: ${error.message}`;
+      console.log(message);
+      if(!serverFailed)
+      {
+          await sendMail('Failure in checking Xahaud node', message);
+          fs.writeFileSync(filePath, new Date().toString())
+      }
     }
   }
 }
 
 async function checkAccountHeartBeat(account) {
   var ledgerIndex = -1;
-  const filePath = path.resolve(__dirname,  account + '.txt');
+  const filePath = path.resolve(__dirname, account + '.txt');
   var accountFailed = fs.existsSync(filePath);
   var date_failure = new Date();
   if (accountFailed) {
@@ -337,7 +353,7 @@ async function sendMail(subject, text) {
     console.log("smtp email not set in .env file. Email is not sent");
     return;
   }
-  
+
   await transporter.sendMail(mailOptions, function (error, info) {
     if (error) {
       console.log(error);
@@ -374,8 +390,11 @@ const main = async () => {
   }
   client.close();
   console.log('Shutting down...');
-  //Workaround so all emails are sent
-  setTimeout(function() {
+  
+  // Workaround so all queued emails are sent. 
+  // I had to explicitly call the exit() function as the application was not stopping 
+  // in case of Xahaud request failure, I don't know why. 
+  setTimeout(function () {
     exit();
   }, 10000);
 };
