@@ -98,4 +98,11 @@ and finally execute the script update.sh:
 sudo ./update.sh
 ```
 
+Here's the one line version of the command sequence:
+
+```
+cd evernode_monitor && chmod +x update.sh && sudo ./update.sh
+```
+
+
 ## Use at your own risk. Double check your addresses before running the script!
