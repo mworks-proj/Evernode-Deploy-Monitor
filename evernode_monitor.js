@@ -13,9 +13,14 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 
 const verboseLog = process.env.verboseLog == "true";
 
+const consoleLog = (msg) => {
+    console.log(new Date().toISOString() + " " + msg)
+  
+}
+
 const logVerbose = (msg) => {
   if (verboseLog) {
-    console.log(msg)
+    consoleLog(msg)
   }
 }
 
@@ -75,7 +80,7 @@ const myDate = new Date().toUTCString();
 
 const monitor_balance = async () => {
 
-  console.log("Monitoring the account XAH balance...");
+  consoleLog("Monitoring the account XAH balance...");
 
   var sourceAccountId = accounts[0];
   var sourceAccount = null;
@@ -93,10 +98,10 @@ const monitor_balance = async () => {
     if (account != xahSourceAccount) {
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-        console.log("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
-        console.log("Source account balance = " + sourceData.account_data.Balance);
+        consoleLog("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
+        consoleLog("Source account balance = " + sourceData.account_data.Balance);
         if (sourceData.account_data.Balance < xah_balance_threshold) {
-          console.log("Not enough funds in first account to fill other accounts");
+          consoleLog("Not enough funds in first account to fill other accounts");
           if (!fs.existsSync(filePath)) {
             await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + sourceAccount.Account + " is too low.\r\n\r\nPlease feed your source account.");
             fs.writeFileSync(filePath, "Balance is too low");
@@ -118,10 +123,10 @@ const monitor_balance = async () => {
 
           const { signedTransaction } = lib.sign(tx, keypair)
 
-          console.log("sending the transaction " + JSON.stringify(tx));
+          consoleLog("sending the transaction " + JSON.stringify(tx));
           //SUBmit sign TX to ledger
           const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-          console.log(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
+          consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
 
@@ -135,7 +140,7 @@ const monitor_balance = async () => {
 }
 
 const transfer_funds = async () => {
-  console.log("Starting the funds transfer batch...");
+  consoleLog("Starting the funds transfer batch...");
 
   for (const account of accounts) {
     logVerbose("start the transferring process on account " + account);
@@ -150,7 +155,7 @@ const transfer_funds = async () => {
         const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
 
         marker = lines?.marker === marker ? null : lines?.marker
-        //console.log(`Got ${lines.lines.length} results`)
+        //consoleLog(`Got ${lines.lines.length} results`)
         lines.lines.forEach(t => {
           if (t.currency == "EVR") {
             logVerbose(JSON.stringify(t))
@@ -190,12 +195,12 @@ const transfer_funds = async () => {
       }
       logVerbose("signing the transaction on account " + account);
       const { signedTransaction } = lib.sign(tx, keypair)
-      console.log(tx)
+      consoleLog(tx)
 
       //SUBmit sign TX to ledger
       logVerbose("sending the EVR payment transation on account " + account);
       const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-      console.log(submit.engine_result, submit.engine_result_message, submit.tx_json.hash)
+      consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash)
 
 
     } //end of for loop
@@ -203,7 +208,7 @@ const transfer_funds = async () => {
 }
 
 const monitor_heartbeat = async () => {
-  console.log("Checking account heartbeat...");
+  consoleLog("Checking account heartbeat...");
   for (const account of accounts) {
     logVerbose("checking account heartbeat on account " + account);
     await checkAccountHeartBeat(account);
@@ -216,7 +221,7 @@ function getMinutesBetweenDates(startDate, endDate) {
 }
 
 const monitor_xahaud_nodes = async () => {
-  console.log("Monitoring xahaud nodes...");
+  consoleLog("Monitoring xahaud nodes...");
   xahaudServers = process.env.xahaudServers.split('\n');
   for (const xahaudServer of xahaudServers) {
     const filePath = path.resolve(__dirname, btoa(xahaudServer) + '_xahaud.txt');
@@ -250,7 +255,7 @@ const monitor_xahaud_nodes = async () => {
     }
     catch (error) {
       var message = `A en error has occured while checking  ${xahaudServer}\n\nError message: ${error.message}`;
-      console.log(message);
+      consoleLog(message);
       if(!serverFailed)
       {
           await sendMail('Failure in checking Xahaud node', message);
@@ -302,12 +307,12 @@ async function checkAccountHeartBeat(account) {
           date.getUTCDate(), date.getUTCHours(),
           date.getUTCMinutes(), date.getUTCSeconds());
         if (now_utc - utcMilliseconds > 1000 * 60 * minutes_from_last_heartbeat_alert_threshold) {
-          console.log("Handling failure for too old heartbeat transaction, account failed = " + accountFailed);
+          consoleLog("Handling failure for too old heartbeat transaction, account failed = " + accountFailed);
           await handleFailure(account, accountFailed, filePath);
           return;
         }
         if (transaction.tx.Destination == heartbeatAccount) {
-          //console.log("System running regularly " + account + "");
+          //consoleLog("System running regularly " + account + "");
           if (fs.existsSync(filePath)) {
             await sendSuccess(account);
             fs.rmSync(filePath);
@@ -316,7 +321,7 @@ async function checkAccountHeartBeat(account) {
         }
       }
       if (response.transactions.length < 5) {
-        console.log("Handling failure for no heartbeat transactions, account failed = " + accountFailed);
+        consoleLog("Handling failure for no heartbeat transactions, account failed = " + accountFailed);
         await handleFailure(account, accountFailed, filePath);
       }
     }
@@ -328,7 +333,7 @@ async function handleFailure(account, accountFailed, filePath) {
     await sendFailure(account);
     fs.writeFileSync(filePath, new Date().toString())
   }
-  console.log("ALERT, SYSTEM STOPPED " + account);
+  consoleLog("ALERT, SYSTEM STOPPED " + account);
 }
 
 async function sendFailure(account) {
@@ -350,33 +355,33 @@ async function sendMail(subject, text) {
     subject: subject,
     text: text
   };
-  console.log("SENDING MAIL " + JSON.stringify(mailOptions));
+  consoleLog("SENDING MAIL " + JSON.stringify(mailOptions));
 
   if (!smtpEmail) {
-    console.log("smtp email not set in .env file. Email is not sent");
+    consoleLog("smtp email not set in .env file. Email is not sent");
     return;
   }
 
   await transporter.sendMail(mailOptions, function (error, info) {
     if (error) {
-      console.log(error);
+      consoleLog(error);
     } else {
-      console.log('Email sent: ' + info.response);
+      consoleLog('Email sent: ' + info.response);
     }
   });
 }
 
 function validate() {
   if (!accounts || accounts.length == 0 || accounts[0] == "") {
-    console.log("no accounts set in .env file.");
+    consoleLog("no accounts set in .env file.");
     return false;
   }
   if (!secret && (run_evr_withdrawal || run_xah_balance_monitor)) {
-    console.log("secret not set in .env file.");
+    consoleLog("secret not set in .env file.");
     return false;
   }
   if ( run_xahaud_monitor && !process.env.xahaudServers) {
-    console.log("no xahaud servers set in .env file.");
+    consoleLog("no xahaud servers set in .env file.");
     return false;
   }
 
@@ -392,7 +397,7 @@ const main = async () => {
     if (run_xahaud_monitor) await monitor_xahaud_nodes();
   }
   client.close();
-  console.log('Shutting down...');
+  consoleLog('Shutting down...');
   // Workaround so all queued emails are sent. 
   // I had to explicitly call the exit() function as the application was not stopping 
   // in case of Xahaud request failure, I don't know why. 
