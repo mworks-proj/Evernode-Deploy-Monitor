@@ -195,12 +195,12 @@ const transfer_funds = async () => {
       }
       logVerbose("signing the transaction on account " + account);
       const { signedTransaction } = lib.sign(tx, keypair)
-      consoleLog(tx)
+      logVerbose(JSON.stringify(tx))
 
       //SUBmit sign TX to ledger
-      logVerbose("sending the EVR payment transation on account " + account);
+      consoleLog("sending the EVR payment transaction on account " + account);
       const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-      consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash)
+      consoleLog("Payment sent  " + JSON.stringify(submit));
 
 
     } //end of for loop
