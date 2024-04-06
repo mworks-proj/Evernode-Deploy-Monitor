@@ -200,7 +200,7 @@ const transfer_funds = async () => {
       //SUBmit sign TX to ledger
       consoleLog("sending the EVR payment transaction on account " + account);
       const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-      consoleLog("Payment sent  " + JSON.stringify(submit));
+      consoleLog("Payment sent, result = " + submit.engine_result);
 
 
     } //end of for loop
