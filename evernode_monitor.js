@@ -103,7 +103,7 @@ const monitor_balance = async () => {
         if (sourceData.account_data.Balance < xah_balance_threshold) {
           consoleLog("Not enough funds in first account to fill other accounts");
           if (!fs.existsSync(filePath)) {
-            await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + sourceAccount.Account + " is too low.\r\n\r\nPlease feed your source account.");
+            await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
             fs.writeFileSync(filePath, "Balance is too low");
           }
         }
@@ -229,7 +229,7 @@ const monitor_xahaud_nodes = async () => {
     var date_failure = new Date();
     
     if (serverFailed) {
-      date_failure = Date.parse(fs.readFileSync(filePath, 'utf8'));
+      date_failure = new Date(Date.parse(fs.readFileSync(filePath, 'utf8')));
       logVerbose("xahaud server " + xahaudServer + " is in status failed since " + date_failure);
       const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
       if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
@@ -271,9 +271,11 @@ async function checkAccountHeartBeat(account) {
   var accountFailed = fs.existsSync(filePath);
   var date_failure = new Date();
   if (accountFailed) {
-    date_failure = Date.parse(fs.readFileSync(filePath, 'utf8'));
+    date_failure = new Date(Date.parse(fs.readFileSync(filePath, 'utf8')));
     logVerbose("account " + account + " is in status failed since " + date_failure);
     const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
+    logVerbose("diffMinutes = " + diffMinutes);
+    logVerbose("alert_repeat_interval_in_minutes = " + alert_repeat_interval_in_minutes);
     if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
       accountFailed = false;
     }
@@ -283,6 +285,7 @@ async function checkAccountHeartBeat(account) {
     let marker = '';
     const l = [];
     while (typeof marker === 'string') {
+      logVerbose("getting last 5 transactions on account " + account + " with last ledger " + ledgerIndex);
       const response = await client.send({
         "id": 2,
         "command": "account_tx",
@@ -298,8 +301,9 @@ async function checkAccountHeartBeat(account) {
       var i = 0;
       for (var tIndex = 0; tIndex < response.transactions.length; tIndex++) {
         var transaction = response.transactions[tIndex];
-        ledgerIndex = transaction.tx.ledger_index;
-
+        ledgerIndex = transaction.tx.ledger_index - 1;
+        logVerbose(JSON.stringify(transaction.tx));
+        logVerbose(tIndex + " " +  2 +  " new ledgerIndex = " + ledgerIndex);
         var utcMilliseconds = 1000 * (transaction.tx.date + 946684800);
         var transactionDate = new Date(0); // The 0 there is the key, which sets the date to the epoch
         var date = new Date();
@@ -323,6 +327,7 @@ async function checkAccountHeartBeat(account) {
       if (response.transactions.length < 5) {
         consoleLog("Handling failure for no heartbeat transactions, account failed = " + accountFailed);
         await handleFailure(account, accountFailed, filePath);
+        return;
       }
     }
   }
