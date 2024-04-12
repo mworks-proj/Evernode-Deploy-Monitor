@@ -96,6 +96,7 @@ const monitor_balance = async () => {
     var sequence = sourceData.account_data.Sequence;
 
     if (account != xahSourceAccount) {
+        logVerbose("Balance for account " + account + " is " + account_data.Balance);
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
         consoleLog("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
