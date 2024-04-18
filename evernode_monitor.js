@@ -28,7 +28,7 @@ logVerbose("Original account string = " + process.env.accounts);
 logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
 
 const accounts = process.env.accounts.split('\n');
-const xahaudServers = [];
+var xahaudServers = [];
 
 const evrDestinationAccount = process.env.evrDestinationAccount;
 
