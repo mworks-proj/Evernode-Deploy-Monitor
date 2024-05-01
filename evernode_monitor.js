@@ -28,7 +28,6 @@ logVerbose("Original account string = " + process.env.accounts);
 logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
 
 const accounts = process.env.accounts.split('\n');
-var xahaudServers = [];
 
 const evrDestinationAccount = process.env.evrDestinationAccount;
 
@@ -46,9 +45,6 @@ if (process.env.secret) {
 const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
 const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
 const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
-const run_xahaud_monitor = process.env.run_xahaud_monitor == "true";
-
-logVerbose("run_xahaud_monitor = " + run_xahaud_monitor);
 
 const xahaud = process.env.xahaud;
 const client = new XrplClient(xahaud);
@@ -221,50 +217,6 @@ function getMinutesBetweenDates(startDate, endDate) {
   return (diff / 60000);
 }
 
-const monitor_xahaud_nodes = async () => {
-  consoleLog("Monitoring xahaud nodes...");
-  xahaudServers = process.env.xahaudServers.split('\n');
-  for (const xahaudServer of xahaudServers) {
-    const filePath = path.resolve(__dirname, btoa(xahaudServer) + '_xahaud.txt');
-    var serverFailed = fs.existsSync(filePath);
-    var date_failure = new Date();
-    
-    if (serverFailed) {
-      date_failure = new Date(Date.parse(fs.readFileSync(filePath, 'utf8')));
-      logVerbose("xahaud server " + xahaudServer + " is in status failed since " + date_failure);
-      const diffMinutes = getMinutesBetweenDates(date_failure, new Date());
-      if (alert_repeat_interval_in_minutes > 0 && diffMinutes > alert_repeat_interval_in_minutes) {
-        serverFailed = false;
-      }
-    }
-    var xahaudClient = new XrplClient(xahaudServer, {
-      assumeOfflineAfterSeconds: 2, connectAttemptTimeoutSeconds: 2
-    });
-    logVerbose("pinging xahaud node " + xahaudServer);
-    const tx = {
-      "id": 1,
-      "command": "ping"
-    }
-    try {
-      var result = await xahaudClient.send({ command: "ping", id: 1 }, { timeoutSeconds: 2 });
-      logVerbose("successfully pinged xahaud node " + xahaudServer);
-      xahaudClient.close();
-      if (fs.existsSync(filePath)) {
-        await sendMail('Xahaud node restored', 'Xahaud node ' + xahaudServer + ' restored');
-        fs.rmSync(filePath);
-      }
-    }
-    catch (error) {
-      var message = `A en error has occured while checking  ${xahaudServer}\n\nError message: ${error.message}`;
-      consoleLog(message);
-      if(!serverFailed)
-      {
-          await sendMail('Failure in checking Xahaud node', message);
-          fs.writeFileSync(filePath, new Date().toString())
-      }
-    }
-  }
-}
 
 async function checkAccountHeartBeat(account) {
   var ledgerIndex = -1;
@@ -386,11 +338,6 @@ function validate() {
     consoleLog("secret not set in .env file.");
     return false;
   }
-  if ( run_xahaud_monitor && !process.env.xahaudServers) {
-    consoleLog("no xahaud servers set in .env file.");
-    return false;
-  }
-
   return true;
 }
 
@@ -400,7 +347,6 @@ const main = async () => {
     if (run_evr_withdrawal) { await transfer_funds() };
     if (run_heartbeat_monitor) await monitor_heartbeat();
     if (run_xah_balance_monitor) await monitor_balance();
-    if (run_xahaud_monitor) await monitor_xahaud_nodes();
   }
   client.close();
   consoleLog('Shutting down...');

@@ -10,7 +10,6 @@ It is made of 3 modules:
 1. Move all EVRs from your node accounts to a single account.
 2. Monitor the heartbeat of all your nodes and send an alert email in case no heartbeat was sent in the last N (configurable) minutes.
 3. Send a few XAH to your Evernode accounts when the balance is below a certain threshold (configurable).
-4. Monitor your Xahaud nodes
 
 The hub accounts can be one of your evernode accounts or another one of your choice. 
 
@@ -36,10 +35,6 @@ This script cycles through your accounts and checks whether each account sent a 
 ## 3. Send XAH to the account if balance is too low
 
 As a minimum numer of XAH is required to run an evernode host, this script sends N (configurable) XAH from the first account when the balance is below a certain threshold (configurable). In case the first account balance is too low to send XAH, an alert email is sent to the configured email. This means you will only have to check the first account XAH balance and you can ignore the others that are automatically filled when needed.
-
-## 4. Monitor your Xahaud nodes
-
-A ping request is sent to all the configured Xahaud nodes and an alert email is sent in case of failure.
 
 ## SMTP server
 
