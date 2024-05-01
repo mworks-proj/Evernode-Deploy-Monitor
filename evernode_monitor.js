@@ -206,9 +206,11 @@ const transfer_funds = async () => {
 
 const monitor_heartbeat = async () => {
   consoleLog("Checking account heartbeat...");
+  var accountIndex = 1;
   for (const account of accounts) {
     logVerbose("checking account heartbeat on account " + account);
-    await checkAccountHeartBeat(account);
+    await checkAccountHeartBeat(account, accountIndex);
+    accountIndex++;
   }
 }
 
@@ -218,7 +220,7 @@ function getMinutesBetweenDates(startDate, endDate) {
 }
 
 
-async function checkAccountHeartBeat(account) {
+async function checkAccountHeartBeat(account, accountIndex) {
   var ledgerIndex = -1;
   const filePath = path.resolve(__dirname, account + '.txt');
   var accountFailed = fs.existsSync(filePath);
@@ -265,13 +267,13 @@ async function checkAccountHeartBeat(account) {
           date.getUTCMinutes(), date.getUTCSeconds());
         if (now_utc - utcMilliseconds > 1000 * 60 * minutes_from_last_heartbeat_alert_threshold) {
           consoleLog("Handling failure for too old heartbeat transaction, account failed = " + accountFailed);
-          await handleFailure(account, accountFailed, filePath);
+          await handleFailure(account, accountFailed, filePath, accountIndex);
           return;
         }
         if (transaction.tx.Destination == heartbeatAccount) {
           //consoleLog("System running regularly " + account + "");
           if (fs.existsSync(filePath)) {
-            await sendSuccess(account);
+            await sendSuccess(account, accountIndex);
             fs.rmSync(filePath);
           }
           return;
@@ -286,23 +288,23 @@ async function checkAccountHeartBeat(account) {
   }
 }
 
-async function handleFailure(account, accountFailed, filePath) {
+async function handleFailure(account, accountFailed, filePath, accountIndex) {
   if (!accountFailed) {
-    await sendFailure(account);
+    await sendFailure(account, accountIndex);
     fs.writeFileSync(filePath, new Date().toString())
   }
   consoleLog("ALERT, SYSTEM STOPPED " + account);
 }
 
-async function sendFailure(account) {
-  var subject = "Failure in Evernode heartbeat";
-  var text = "Failure in retrieving Evernode heartbeat for account " + account;
+async function sendFailure(account, accountIndex) {
+  var subject = "Failure in Evernode heartbeat " + accountIndex.toString();
+  var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")";
   await sendMail(subject, text);
 }
 
-async function sendSuccess(account) {
-  var subject = "Evernode heartbeat restored";
-  var text = "Evernode heartbeat restored in account " + account;
+async function sendSuccess(account, accountIndex) {
+  var subject = "Evernode heartbeat restored " +  accountIndex.toString();
+  var text = "Evernode heartbeat restored in account " + account + " (" + accountIndex.toString() + ")";
   await sendMail(subject, text);
 }
 
