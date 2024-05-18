@@ -29,6 +29,10 @@ logVerbose("accounts length after split = " + process.env.accounts.split('\n').l
 
 const accounts = process.env.accounts.split('\n');
 
+var reputationAccounts =[];
+if(process.env.reputationAccounts!=null)
+   reputationAccounts = process.env.reputationAccounts.split('\n');
+
 const evrDestinationAccount = process.env.evrDestinationAccount;
 
 const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
@@ -52,7 +56,9 @@ const client = new XrplClient(xahaud);
 const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_last_heartbeat_alert_threshold;
 const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_minutes;
 const xah_balance_threshold = process.env.xah_balance_threshold * 1000000;
+const evr_balance_threshold = process.env.evr_balance_threshold * 1;
 const refill_amount = process.env.refill_amount * 1000000;
+const evr_refill_amount = process.env.evr_refill_amount * 1 ;
 
 const smtpKey = process.env.smtpKey;
 const smtpEmail = process.env.smtpEmail;
@@ -82,8 +88,10 @@ const monitor_balance = async () => {
   var sourceAccount = null;
   var sequence = 0;
 
+  var allAccounts = accounts.concat(reputationAccounts);
 
-  for (const account of accounts) {
+  logVerbose("accounts = " + allAccounts.length);
+  for (const account of allAccounts) {
 
     const { account_data } = await client.send({ command: "account_info", account: account });
 
@@ -134,6 +142,91 @@ const monitor_balance = async () => {
 
     }
   }
+
+  for (const account of reputationAccounts) {
+
+    const { account_data } = await client.send({ command: "account_info", account: account });
+
+    var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
+
+    var sequence = sourceData.account_data.Sequence;
+
+    if (account != xahSourceAccount) {
+      var balance = await GetEvrBalance(account);
+      var sourceBalance = await GetEvrBalance(xahSourceAccount);
+      
+      logVerbose("EVR Balance for account " + account + " is " + balance);
+      logVerbose("EVR Balance for source account " + xahSourceAccount + " is " + sourceBalance);
+      if (parseInt(balance) < evr_balance_threshold) {
+        const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
+        
+        consoleLog("Account EVR balance for " + account + " is " + balance + ", sending funds");
+        
+        if (sourceBalance < evr_refill_amount) {
+          consoleLog("Not enough funds in first account to fill other accounts with EVR");
+          logVerbose("sourceBalance in EVR " + sourceBalance);
+          logVerbose("evr_refill_amount =  " + evr_refill_amount);
+          if (!fs.existsSync(filePath)) {
+            await sendMail("Insufficient EVR funds", "We tried to send EVR to " + account + " but the balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
+            fs.writeFileSync(filePath, "EVR Balance is too low");
+          }
+        }
+        else {
+
+          const tx = { 
+            TransactionType: 'Payment',
+            Account: xahSourceAccount,  //Destination account is use to fillEvernode accounts
+            Amount: {
+              "currency": "EVR",
+              "value": evr_refill_amount, //*** Change to balance (no quotes) or use "0.01" for testing low payment
+              "issuer": "rEvernodee8dJLaFsujS6q1EiXvZYmHXr8" //DO NOT CHANGE - this is the EVR Trustline Issuer address
+            },
+            Destination: account, //the account that has to be filled
+            DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
+            Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
+            NetworkID: '21337', //XAHAU Production ID
+            Sequence: sequence
+          }
+
+          const { signedTransaction } = lib.sign(tx, keypair)
+
+          consoleLog("sending the EVR transaction " + JSON.stringify(tx));
+          //SUBmit sign TX to ledger
+          const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
+          consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
+
+          if (fs.existsSync(filePath)) fs.rmSync(filePath);
+
+          sequence++;
+
+        }
+      }
+
+    }
+  }
+}
+
+async function GetEvrBalance(account)
+{
+  logVerbose("getting the EVR balance for " + account);
+  let marker = ''
+  const l = []
+  var balance = 0
+  while (typeof marker === 'string') {
+    const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
+
+    marker = lines?.marker === marker ? null : lines?.marker
+    //consoleLog(`Got ${lines.lines.length} results`)
+    lines.lines.forEach(t => {
+      if (t.currency == "EVR") {
+        logVerbose(JSON.stringify(t))
+
+        balance = balance + t.balance
+        logVerbose("EVR balance for account " + account + " increased by " + t.balance);
+      }
+    })
+  }
+  return balance;
 }
 
 const transfer_funds = async () => {
