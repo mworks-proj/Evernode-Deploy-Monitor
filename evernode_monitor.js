@@ -57,6 +57,7 @@ const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_las
 const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_minutes;
 const xah_balance_threshold = process.env.xah_balance_threshold * 1000000;
 const evr_balance_threshold = process.env.evr_balance_threshold * 1;
+const minimum_evr_transfer = process.env.minimum_evr_transfer * 1;
 const refill_amount = process.env.refill_amount * 1000000;
 const evr_refill_amount = process.env.evr_refill_amount * 1 ;
 
@@ -257,8 +258,8 @@ const transfer_funds = async () => {
       }
 
       //check just the EVRs balance is > 0 if not go to start of for loop with continue
-      if (balance <= 0) {
-        logVerbose('# Evr Balance is zero in account ' + account);
+      if (balance <= minimum_evr_transfer) {
+        logVerbose('# EVR Balance is below the minumum required to send the funds for account ' + account);
         continue;
       }
 
