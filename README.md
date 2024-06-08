@@ -2,7 +2,11 @@
 
 This nodejs script (requires v20.11.1) will help you in the monitoring and managering all of your evernodes hosts accounts.
 
-(this fork adds, wallet_setp, the abbility to run each mudle manually by using the module name after the evernode_monitor.js, auto fee escalation, and also fixes a number bugs (like with balance))
+this fork adds;
+wallet_setp module, 
+the abbility to run each module manually by using the module name after the evernode_monitor.js,
+auto fee escalation, 
+and also fixes a number bugs (like with balance)
 
 
 If you have many nodes, using this script you will have to check only one account instead of all of them.

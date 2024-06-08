@@ -41,7 +41,7 @@ async function getAccounts() {
   if (use_keypair_file) {
     try {
       logVerbose("using key_pair.txt for accounts");
-      const data = await fs.promises.readFile('key_pair.txt', 'utf8');
+      const data = await fs.promises.readFile(keypair_file, 'utf8');
       accounts = await data.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       accounts_seed = await data.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       logVerbose("accounts string = " + accounts);
@@ -167,10 +167,10 @@ async function monitor_balance(){
             TransactionType: 'Payment',
             Account: xahSourceAccount, 
             Amount: (refill_amount).toString(),
-            Destination: account_data.Account, //the account that has to be filled
-            DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
-            Fee: feeAmount, //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
-            NetworkID: network_id, //XAHAU Production ID
+            Destination: account_data.Account, 
+            DestinationTag: evrDestinationAccountTag,
+            Fee: feeAmount, 
+            NetworkID: network_id,
             Sequence: sequence
           }
 
@@ -224,23 +224,22 @@ async function monitor_balance(){
 
             const tx = { 
               TransactionType: 'Payment',
-              Account: xahSourceAccount,  //Destination account is use to fillEvernode accounts
+              Account: xahSourceAccount,  //Destination account
               Amount: {
                 "currency": "EVR",
-                "value": evr_refill_amount, //*** Change to balance (no quotes) or use "0.01" for testing low payment
-                "issuer": trustlineAddress //DO NOT CHANGE - this is the EVR Trustline Issuer address
+                "value": evr_refill_amount,
+                "issuer": trustlineAddress 
               },
               Destination: account, //the account that has to be filled
-              DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
-              Fee: feeAmount, //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
-              NetworkID: network_id, //XAHAU Production ID
+              DestinationTag: evrDestinationAccountTag, 
+              Fee: feeAmount,
+              NetworkID: network_id,
               Sequence: sequence
             }
 
             const { signedTransaction } = lib.sign(tx, keypair)
 
             consoleLog("sending the EVR transaction " + JSON.stringify(tx));
-            //SUBmit sign TX to ledger
             const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
             consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
 
@@ -581,7 +580,7 @@ async function wallet_setup(){
               Account: xahSourceAccount,
               Amount: {
                 "currency": "EVR",
-                "value": evrSetupamount, //*** Change to balance (no quotes) or use "0.01" for testing low payment
+                "value": evrSetupamount,
                 "issuer": trustlineAddress
               },
               Destination: account,
@@ -640,7 +639,7 @@ async function wallet_setup(){
     logVerbose(" ");
     loop++;
   };
-  consoleLog("wallet setup complete. setting up .env file, and switching off run_wallet_setup in .env file.");
+  consoleLog("wallet setup complete, setting up .env file.");
   await updateEnv('run_wallet_setup', 'false');
   await updateEnv('xahSourceAccount', accounts[0]);
   await updateEnv('evrDestinationAccount', accounts[0]);
@@ -752,9 +751,9 @@ const main = async () => {
 
 // check if theres any command line arguments used
 async function start(){
-  console.log("command >", command);
+  logVerbose("command >", command);
   if (command) {
-    console.log("command = true")
+    logVerbose("command = true")
     if ( command == "wallet_setup" ) { use_keypair_file = true };
     const valid = await validate();
     if (valid) {
