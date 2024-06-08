@@ -1,56 +1,105 @@
 const { XrplClient } = require('xrpl-client')
 const lib = require('xrpl-accountlib');
 const { exit } = require('process');
-
-const fs = require('fs')
 const { createTransport } = require('nodemailer');
-
-
-const path = require('path');
 const { ALPN_ENABLED } = require('constants');
 const { Console } = require('console');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') })
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
-const verboseLog = process.env.verboseLog == "true";
+const verboseLog = process.env.verboseLog === 'true' ? true : false;
 
 const consoleLog = (msg) => {
-  console.log(new Date().toISOString() + " " + msg)
-
+    console.log(new Date().toISOString() + " " + msg)
 }
-
 const logVerbose = (msg) => {
   if (verboseLog) {
     consoleLog(msg)
   }
 }
 
-logVerbose("Original account string = " + process.env.accounts);
-logVerbose("accounts length after split = " + process.env.accounts.split('\n').length);
+const command = process.argv.slice(2)[0];
+const run_wallet_setup = process.env.run_wallet_setup === 'true' ? true : false;
+const run_transfer_funds = process.env.run_transfer_funds === 'true' ? true : false;
+const run_monitor_balance = process.env.run_monitor_balance === 'true' ? true : false;
+const run_monitor_heartbeat = process.env.run_monitor_heartbeat === 'true' ? true : false;
 
-const accounts = process.env.accounts.split('\n');
+// account handling  ........................................................................................................................................................................
 
-var reputationAccounts = [];
-if (process.env.reputationAccounts != null)
-  reputationAccounts = process.env.reputationAccounts.split('\n');
-
-const evrDestinationAccount = process.env.evrDestinationAccount;
-
-const evrDestinationAccountTag = process.env.evrDestinationAccountTag;
-
-const xahSourceAccount = process.env.xahSourceAccount;
-
-var secret = "";
-var keypair;
-if (process.env.secret) {
-  secret = process.env.secret;
-  lib.derive.familySeed(secret);
-  keypair = lib.derive.familySeed(secret)
+let accounts = [];
+let accounts_seed = [];
+let keypair = ""
+let xahSourceAccount;
+let evrDestinationAccount = "";
+let evrDestinationAccountTag = "";
+async function getAccounts() {
+  consoleLog("gettings accounts...");
+  const use_keypair_file = process.env.use_keypair_file;
+  const keypair_file = process.env.keypair_file;
+  if (use_keypair_file) {
+    try {
+      logVerbose("using key_pair.txt for accounts");
+      const data = await fs.promises.readFile('key_pair.txt', 'utf8');
+      accounts = await data.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      accounts_seed = await data.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      logVerbose("accounts string = " + accounts);
+      logVerbose("accounts length = " + accounts.length);
+      xahSourceAccount = accounts[0];
+      evrDestinationAccount = accounts[0];
+      evrDestinationAccountTag = "";
+      var secret = accounts_seed[0];
+      keypair = lib.derive.familySeed(secret);
+    } catch (err) {
+      console.error('Error reading key_pair.txt file:', err);
+      accounts = [];
+    }
+  } else {
+    logVerbose("using .env file for accounts");
+    xahSourceAccount = process.env.xahSourceAccount;
+    evrDestinationAccount = process.env.evrDestinationAccount;
+    evrDestinationAccountTag = process.env.evrDestinationAccountTag;
+    accounts = process.env.accounts.split('\n');
+    logVerbose("accounts string = " + accounts);
+    logVerbose("accounts length = " + accounts.length);
+    if (process.env.secret) {
+      var secret = process.env.secret;
+      keypair = lib.derive.familySeed(secret);
+    } else {
+      console.error('Error reading secret from .env file');
+    }
+  }
 }
-const run_evr_withdrawal = process.env.run_evr_withdrawal == "true";
-const run_xah_balance_monitor = process.env.run_xah_balance_monitor == "true";
-const run_heartbeat_monitor = process.env.run_heartbeat_monitor == "true";
 
-const xahaud = process.env.xahaud;
+var reputationAccounts =[];
+if(process.env.reputationAccounts != "") {
+  reputationAccounts = process.env.reputationAccounts.split('\n');
+  logVerbose("populating reputationAccounts -->", reputationAccounts)
+}
+
+// varible setups  ........................................................................................................................................................................
+
+const use_testnet = process.env.use_testnet === 'true' ? true : false;
+const evrSetupamount = process.env.evrSetupamount;
+const xahSetupamount = process.env.xahSetupamount;
+const feeStartAmount = process.env.fee;
+const auto_adjust_fee = process.env.auto_adjust_fee === 'true' ? true : false;
+const fee_adjust_amount = process.env.fee_adjust_amount;
+let xahaud, network_id, trustlineAddress, heartbeatAccount;
+if (use_testnet) {
+  logVerbose("using testnet varibles");
+  xahaud = process.env.xahaud_test;
+  network_id = "21338";
+  trustlineAddress="r9gYbjBfANRfA1JHfaCVfPPGfXYiqQvmhS";
+  heartbeatAccount = process.env.heartbeatAccount_testnet;
+} else {
+  logVerbose("using mainnet varibles");
+  xahaud = process.env.xahaud;
+  network_id = "21337";
+  trustlineAddress="rEvernodee8dJLaFsujS6q1EiXvZYmHXr8";
+  heartbeatAccount = process.env.heartbeatAccount;
+}
 const client = new XrplClient(xahaud);
 
 const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_last_heartbeat_alert_threshold;
@@ -59,13 +108,13 @@ const xah_balance_threshold = process.env.xah_balance_threshold * 1000000;
 const evr_balance_threshold = process.env.evr_balance_threshold * 1;
 const minimum_evr_transfer = process.env.minimum_evr_transfer * 1;
 const refill_amount = process.env.refill_amount * 1000000;
-const evr_refill_amount = process.env.evr_refill_amount * 1;
+const evr_refill_amount = process.env.evr_refill_amount * 1 ;
+
+// email setup  ........................................................................................................................................................................
 
 const smtpKey = process.env.smtpKey;
 const smtpEmail = process.env.smtpEmail;
-
 const destinationEmail = process.env.destinationEmail || process.env.smtpEmail;
-
 const transporter = createTransport({
   host: "smtp-relay.sendinblue.com",
   port: 587,
@@ -74,79 +123,77 @@ const transporter = createTransport({
     pass: smtpKey,
   },
 });
-
-
-const heartbeatAccount = process.env.heartbeatAccount;
-
 const myDate = new Date().toUTCString();
 
 
-const monitor_balance = async () => {
-
+// Main balance monitor  ........................................................................................................................................................................
+async function monitor_balance(){
+  console.log(" ---------------- ");
   consoleLog("Monitoring the account XAH balance...");
 
-  var sourceAccountId = accounts[0];
-  var sourceAccount = null;
   var sequence = 0;
-
-  var allAccounts = accounts.concat(reputationAccounts);
+  if (reputationAccounts != [] ) {
+    var allAccounts = accounts.concat(reputationAccounts);
+  } else {
+    logVerbose("no reputation accounts to check")
+    var allAccoounts = acounts;
+  }
 
   logVerbose("accounts = " + allAccounts.length);
   for (const account of allAccounts) {
-    if (account) {
-      const { account_data } = await client.send({ command: "account_info", account: account });
 
-      var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
+    const { account_data } = await client.send({ command: "account_info", account: account });
 
-      var sequence = sourceData.account_data.Sequence;
+    var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
 
-      if (account != xahSourceAccount) {
+    var sequence = sourceData.account_data.Sequence;
+
+    if (account != xahSourceAccount) {
         logVerbose("Balance for account " + account + " is " + account_data.Balance);
-        if (parseInt(account_data.Balance) < xah_balance_threshold) {
-          const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-          consoleLog("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
-          consoleLog("Source account balance = " + sourceData.account_data.Balance);
-          if (sourceData.account_data.Balance < xah_balance_threshold) {
-            consoleLog("Not enough funds in first account to fill other accounts");
-            if (!fs.existsSync(filePath)) {
-              await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
-              fs.writeFileSync(filePath, "Balance is too low");
-            }
-          }
-          else {
-
-            const tx = {
-              TransactionType: 'Payment',
-              Account: xahSourceAccount,  //Destination account is use to fillEvernode accounts
-              Amount: (refill_amount).toString(),
-              //Destination: 'rYourWalletYouControl'
-              Destination: account_data.Account, //the account that has to be filled
-              DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
-              Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
-              NetworkID: '21337', //XAHAU Production ID
-              Sequence: sequence
-            }
-
-            const { signedTransaction } = lib.sign(tx, keypair)
-
-            consoleLog("sending the transaction " + JSON.stringify(tx));
-            //SUBmit sign TX to ledger
-            const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-            consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
-
-            if (fs.existsSync(filePath)) fs.rmSync(filePath);
-
-            sequence++;
-
+      if (parseInt(account_data.Balance) < xah_balance_threshold) {
+        const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
+        consoleLog("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
+        consoleLog("Source account balance = " + sourceData.account_data.Balance);
+        if (sourceData.account_data.Balance < xah_balance_threshold) {
+          consoleLog("Not enough funds in first account to fill other accounts");
+          if (!fs.existsSync(filePath)) {
+            await sendMail("Insufficient funds", "We tried to send XAH to " + account + " but the balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
+            fs.writeFileSync(filePath, "Balance is too low");
           }
         }
+        else {
 
+          const tx = {
+            TransactionType: 'Payment',
+            Account: xahSourceAccount, 
+            Amount: (refill_amount).toString(),
+            Destination: account_data.Account, //the account that has to be filled
+            DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
+            Fee: feeAmount, //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
+            NetworkID: network_id, //XAHAU Production ID
+            Sequence: sequence
+          }
+
+          const { signedTransaction } = lib.sign(tx, keypair)
+
+          consoleLog("sending the transaction " + JSON.stringify(tx));
+          //SUBmit sign TX to ledger
+          const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
+          consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
+
+          if (fs.existsSync(filePath)) fs.rmSync(filePath);
+
+          sequence++;
+
+        }
       }
+
     }
   }
 
-  for (const account of reputationAccounts) {
-    if (account) {
+  if (reputationAccounts != [] ) {
+    for (const account of reputationAccounts) {
+
       const { account_data } = await client.send({ command: "account_info", account: account });
 
       var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
@@ -156,14 +203,14 @@ const monitor_balance = async () => {
       if (account != xahSourceAccount) {
         var balance = await GetEvrBalance(account);
         var sourceBalance = await GetEvrBalance(xahSourceAccount);
-
+        
         logVerbose("EVR Balance for account " + account + " is " + balance);
         logVerbose("EVR Balance for source account " + xahSourceAccount + " is " + sourceBalance);
         if (parseInt(balance) < evr_balance_threshold) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-
+          
           consoleLog("Account EVR balance for " + account + " is " + balance + ", sending funds");
-
+          
           if (sourceBalance < evr_refill_amount) {
             consoleLog("Not enough funds in first account to fill other accounts with EVR");
             logVerbose("sourceBalance in EVR " + sourceBalance);
@@ -175,18 +222,18 @@ const monitor_balance = async () => {
           }
           else {
 
-            const tx = {
+            const tx = { 
               TransactionType: 'Payment',
               Account: xahSourceAccount,  //Destination account is use to fillEvernode accounts
               Amount: {
                 "currency": "EVR",
                 "value": evr_refill_amount, //*** Change to balance (no quotes) or use "0.01" for testing low payment
-                "issuer": "rEvernodee8dJLaFsujS6q1EiXvZYmHXr8" //DO NOT CHANGE - this is the EVR Trustline Issuer address
+                "issuer": trustlineAddress //DO NOT CHANGE - this is the EVR Trustline Issuer address
               },
               Destination: account, //the account that has to be filled
               DestinationTag: "", //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
-              Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
-              NetworkID: '21337', //XAHAU Production ID
+              Fee: feeAmount, //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
+              NetworkID: network_id, //XAHAU Production ID
               Sequence: sequence
             }
 
@@ -209,7 +256,7 @@ const monitor_balance = async () => {
   }
 }
 
-async function GetEvrBalance(account) {
+async function GetEvrBalance(account){
   logVerbose("getting the EVR balance for " + account);
   let marker = ''
   const l = []
@@ -220,10 +267,10 @@ async function GetEvrBalance(account) {
     marker = lines?.marker === marker ? null : lines?.marker
     //consoleLog(`Got ${lines.lines.length} results`)
     lines.lines.forEach(t => {
-      if (t.currency == "EVR") {
+      if (t.currency == "EVR" && t.account == trustlineAddress) {
         logVerbose(JSON.stringify(t))
 
-        balance = balance + t.balance
+        balance = parseFloat(balance) + parseFloat(t.balance);
         logVerbose("EVR balance for account " + account + " increased by " + t.balance);
       }
     })
@@ -231,83 +278,130 @@ async function GetEvrBalance(account) {
   return balance;
 }
 
-const transfer_funds = async () => {
+// Fund Sweeper  ........................................................................................................................................................................
+
+//const transfer_funds = async () => {
+async function transfer_funds(){
+  console.log(" ---------------- ");
   consoleLog("Starting the funds transfer batch...");
 
   for (const account of accounts) {
-    if (account != "") {
-      logVerbose("start the transferring process on account " + account);
-      if (account != evrDestinationAccount) {
-        logVerbose("getting account data on account " + account);
-        const { account_data } = await client.send({ command: "account_info", account })
+    logVerbose("start the transferring process on account " + account);
+    if (account != evrDestinationAccount) {
+      var { account_data } = await client.send({ command: "account_info", account })
+      var tesSUCCESS = true;
+      var attempt = 1;
+      var feeAmount = feeStartAmount;
 
+      while (true) {
+        // auto fee calculations
+        let feeResponse = await client.send({ command: 'fee' });
+        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString() };
+        logVerbose("account_data -- >" + JSON.stringify(account_data) + "\nfee calculations --> feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
+
+        // sweep XAH
+        if ( process.env.xah_transfer == "true" && account_data.Balance > 4000000 ) {
+          const XAHtx = {
+            TransactionType: 'Payment',
+            Account: account,
+            Amount: (account_data.Balance - 4000000).toString(),
+            Destination: evrDestinationAccount,
+            Fee: feeAmount,
+            NetworkID: network_id,
+            Sequence: account_data.Sequence++
+          };
+          const { signedTransaction: signedXAH } = lib.sign(XAHtx, keypair)
+          const XAHsubmit = await client.send({ command: 'submit', 'tx_blob': signedXAH });
+          if (XAHsubmit.engine_result !== "tesSUCCESS" ) {
+            tesSUCCESS = false;
+            consoleLog("XAH paymentSweep FAILED TO SEND, " + (account_data.Balance - 2000000) + "XAH " + account + " > xx " + evrDestinationAccount + ", result: " + XAHsubmit.engine_result);
+          } else {   
+          consoleLog("XAH paymentSweep sent, " + (account_data.Balance - 2000000) + "XAH " + account + " --> " + evrDestinationAccount + ", result: " + XAHsubmit.engine_result);
+          };
+        } else {
+          consoleLog("XAH Balance is " + account_data.Balance + " XAH, below 4 XAH which is minumum required to sweep XAH funds, skipping account...");
+        }
+
+        
+        // fee check
+        feeResponse = await client.send({ command: 'fee' });
+        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
+
+        // sweep EVR
         let marker = ''
         const l = []
         var balance = 0
+        // check EVR exsists, and get EVR balance
         while (typeof marker === 'string') {
           const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
-
           marker = lines?.marker === marker ? null : lines?.marker
           //consoleLog(`Got ${lines.lines.length} results`)
           lines.lines.forEach(t => {
-            if (t.currency == "EVR") {
-              logVerbose(JSON.stringify(t))
-
-              balance = balance + t.balance
-
+            if (t.currency == "EVR" && t.account == trustlineAddress) {
+              logVerbose("line data -->" + JSON.stringify(t));
+              balance = parseFloat(balance) + parseFloat(t.balance);
             }
           })
-        }
+        };
 
-        //check just the EVRs balance is > 0 if not go to start of for loop with continue
+        // check if the EVR balance is enough to sweep
         if (balance <= minimum_evr_transfer) {
-          logVerbose('# EVR Balance is below the minumum required to send the funds for account ' + account);
-          continue;
+          consoleLog("EVR Balance is " + balance + " EVR, below minumum required of " + minimum_evr_transfer + " to sweep EVR funds, skipping account...");
+        } else {
+          // sweep EVR to evrDestinationAccount
+          const EVRtx = {
+            TransactionType: 'Payment',
+            Account: account,
+            Amount: {
+              "currency": "EVR",
+              "value": balance,
+              "issuer": trustlineAddress
+            },
+            Destination: evrDestinationAccount,
+            DestinationTag: evrDestinationAccountTag,
+            Fee: feeAmount,
+            NetworkID: network_id,
+            Sequence: account_data.Sequence++
+          }
+          const { signedTransaction: signedEVR } = lib.sign(EVRtx, keypair)
+          const EVRsubmit = await client.send({ command: 'submit', 'tx_blob': signedEVR })
+          if (EVRsubmit.engine_result !== "tesSUCCESS" ) {
+            tesSUCCESS = false;
+            consoleLog("EVR paymentSweep FAILED TO SEND, " + balance + "EVR " + account + " > xx " + evrDestinationAccount + ", result: " + EVRsubmit.engine_result);
+          } else {   
+          consoleLog("EVR paymentSweep sent, " + balance + "EVR " + account + " --> " + evrDestinationAccount + ", result: " + EVRsubmit.engine_result);
+          };
         }
 
+        if ( tesSUCCESS == true ) {
+          break 
+        } else { 
+          attempt++;
+          if ( attempt > 4 ) { process.exit() };
+          logVerbose("\nsomething failed, retying, " + attempt + " of 4");
+        };
+      }
 
-        //Destination Adress and TAG set in.env file
-        const tag = process.env.tag;
-
-        //send all funds to your chosen Exchange, Xaman or other Xahau account 
-        logVerbose("Balance = " + balance + ", preparing the payment transaction on account " + account);
-        const tx = {
-          TransactionType: 'Payment',
-          Account: account,
-          Amount: {
-            "currency": "EVR",
-            "value": balance, //*** Change to balance (no quotes) or use "0.01" for testing low payment
-            "issuer": "rEvernodee8dJLaFsujS6q1EiXvZYmHXr8" //DO NOT CHANGE - this is the EVR Trustline Issuer address
-          },
-          //Destination: 'rYourWalletYouControl'
-          Destination: evrDestinationAccount, //your exchnage or xaman wallet address
-          DestinationTag: evrDestinationAccountTag, //*** set to YOUR exchange wallet TAG Note: no quotes << do not forget to set TAG
-          Fee: '12', //12 drops aka 0.000012 XAH, Note: Fee is XAH NOT EVR
-          NetworkID: '21337', //XAHAU Production ID
-          Sequence: account_data.Sequence
-        }
-        logVerbose("signing the transaction on account " + account);
-        const { signedTransaction } = lib.sign(tx, keypair)
-        logVerbose(JSON.stringify(tx))
-
-        //SUBmit sign TX to ledger
-        consoleLog("sending the EVR payment transaction on account " + account);
-        const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-        consoleLog("Payment sent, result = " + submit.engine_result);
-
-
-      } //end of for loop
-    }
+    } else {
+      logVerbose("skipping as its the source account.");
+    };
+    logVerbose(" ---------------- ");
+    logVerbose(" ");
   }
 }
 
-const monitor_heartbeat = async () => {
+// Main heartbeat monitor  ........................................................................................................................................................................
+
+//const monitor_heartbeat = async () => {
+async function monitor_heartbeat() {
+  console.log(" ---------------- ");
   consoleLog("Checking account heartbeat...");
   var accountIndex = 1;
   for (const account of accounts) {
     logVerbose("checking account heartbeat on account " + account);
     await checkAccountHeartBeat(account, accountIndex);
     accountIndex++;
+    consoleLog(" ---------------- ");
   }
 }
 
@@ -355,7 +449,7 @@ async function checkAccountHeartBeat(account, accountIndex) {
         var transaction = response.transactions[tIndex];
         ledgerIndex = transaction.tx.ledger_index - 1;
         logVerbose(JSON.stringify(transaction.tx));
-        logVerbose(tIndex + " " + 2 + " new ledgerIndex = " + ledgerIndex);
+        logVerbose(tIndex + " " +  2 +  " new ledgerIndex = " + ledgerIndex);
         var utcMilliseconds = 1000 * (transaction.tx.date + 946684800);
         var transactionDate = new Date(0); // The 0 there is the key, which sets the date to the epoch
         var date = new Date();
@@ -385,6 +479,206 @@ async function checkAccountHeartBeat(account, accountIndex) {
   }
 }
 
+// Initial wallet setup  ........................................................................................................................................................................
+
+//const wallet_setup = async () => {
+async function wallet_setup(){
+  console.log(" ---------------- ");
+  consoleLog("running initial wallet setup...");
+
+  var loop = 0;
+  for (const account of accounts) {
+    logVerbose("starting initial wallet setup on account " + loop + "> " + account);
+    
+    if (account != xahSourceAccount) {
+      var tesSUCCESS = true;
+      var attempt = 1;
+      var feeAmount = feeStartAmount;
+
+      // get source account data
+      const { account_data: account_dataSource } = await client.send({ command: "account_info", account: xahSourceAccount });
+      logVerbose("xahSourceAccount >" + xahSourceAccount + "  account_data >" + JSON.stringify(account_dataSource));
+
+      while (true) {
+        // auto fee calculations
+        let feeResponse = await client.send({ command: 'fee' });
+        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
+        logVerbose("fee calculations, feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
+
+        // Send xahSetupamount XAH ( activating account )
+        if (xahSetupamount != 0){
+          const xahTx = {
+            TransactionType: 'Payment',
+            Account: xahSourceAccount,
+            Amount: (xahSetupamount * 1000000).toString(), // Convert to drops
+            Destination: account,
+            Fee: feeAmount,
+            NetworkID: network_id,
+            Sequence: account_dataSource.Sequence++
+          };
+          const { signedTransaction: signedXrpTx } = lib.sign(xahTx, keypair);
+          const xahSubmit = await client.send({ command: 'submit', 'tx_blob': signedXrpTx });
+          if (xahSubmit.engine_result !== "tesSUCCESS" && xahSubmit.engine_result !== "terQUEUED" ) {
+            tesSUCCESS = false;
+            consoleLog(xahSetupamount + "XAH payment FAILED TO SEND to from " + xahSourceAccount + " xxx " + account + ", result: " + xahSubmit.engine_result);
+          } else {   
+          consoleLog("payment sent, " + xahSetupamount + "XAH " + xahSourceAccount + " --> " + account + ", result: " + xahSubmit.engine_result);
+          };
+        }
+
+        //get account data (now its been acivated)
+        const { account_data } = await client.send({ command: "account_info", account: account });
+        logVerbose("account >" + account + "  account_data >" + JSON.stringify(account_data));
+
+        // Set trustline and send tokens
+        if (evrSetupamount != 0){
+          // Set trustline
+          const trustlineTx = {
+            TransactionType: 'TrustSet',
+            Account: account,
+            LimitAmount: {
+              currency: 'EVR',
+              value: '73000000',
+              issuer: trustlineAddress
+            },
+            Fee: feeAmount,
+            NetworkID: network_id,
+            Sequence: account_data.Sequence++
+          };
+          trustlineKeypair = lib.derive.familySeed(accounts_seed[loop]);
+          const { signedTransaction: signedTrustline } = lib.sign(trustlineTx, trustlineKeypair);
+          const trustSubmit = await client.send({ command: 'submit', 'tx_blob': signedTrustline });
+          if ( trustSubmit.engine_result !== "tesSUCCESS" && trustSubmit.engine_result !== "terQUEUED" ) { 
+            tesSUCCESS = false;
+            consoleLog("EVR trustline FAILED TO SET on " + account + ", result: " + trustSubmit.engine_result);
+          } else {
+            consoleLog("EVR trustline set on " + account + ", result: " + trustSubmit.engine_result);
+          }
+
+          //wait for trustline to be established
+          if ( "tesSUCCESS" == "true" ) {
+            var truslineEstablished = false
+            while (truslineEstablished == false) {
+              const lines = await client.send({ command: 'account_lines', account })
+              //marker = lines?.marker === marker ? null : lines?.marker
+              consoleLog(`Got ${lines.lines.length} results`)
+              lines.lines.forEach(t => {
+                if (t.account == trustlineAddress) {
+                  truslineEstablished = true
+                }
+              })
+            }
+
+            // fee check
+            if ( trustSubmit.engine_result !== "terQUEUED" ){
+              feeResponse = await client.send({ command: 'fee' });
+              if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
+            }
+
+            // Send EVR tokens
+            const tokenTx = {
+              TransactionType: 'Payment',
+              Account: xahSourceAccount,
+              Amount: {
+                "currency": "EVR",
+                "value": evrSetupamount, //*** Change to balance (no quotes) or use "0.01" for testing low payment
+                "issuer": trustlineAddress
+              },
+              Destination: account,
+              DestinationTag: "",
+              Fee: feeAmount, 
+              NetworkID: network_id,
+              Sequence: account_dataSource.Sequence++
+            };
+            const { signedTransaction: signedTokenTx } = lib.sign(tokenTx, keypair);
+            const evrSubmit = await client.send({ command: 'submit', 'tx_blob': signedTokenTx });
+            if ( evrSubmit.engine_result !== "tesSUCCESS" && evrSubmit.engine_result !== "terQUEUED") { 
+              tesSUCCESS = false;
+              consoleLog(evrSetupamount + " EVR FAILED TO SEND, " + xahSourceAccount + " xxx " + account + ", result: " + evrSubmit.engine_result);
+            } else {
+              consoleLog(evrSetupamount + " EVR sent, " + xahSourceAccount + " --> " + account + ", result: " + evrSubmit.engine_result);
+            }
+          }
+        }
+
+        feeResponse = await client.send({ command: 'fee' });
+        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
+
+        // Set regularKey
+        const regularTx = {
+          TransactionType: 'SetRegularKey',
+          Account: account,
+          Fee: feeAmount,
+          RegularKey: xahSourceAccount,
+          NetworkID: network_id,
+          Sequence: account_data.Sequence++
+        };
+        regularKeypair = lib.derive.familySeed(accounts_seed[loop]);
+        const { signedTransaction: signedRegular } = lib.sign(regularTx, regularKeypair);
+        const regularSubmit = await client.send({ command: 'submit', 'tx_blob': signedRegular });
+        if ( regularSubmit.engine_result !== "tesSUCCESS" && regularSubmit.engine_result !== "terQUEUED" ) { 
+          tesSUCCESS = false;
+          consoleLog("regular key " + xahSourceAccount + " FAILED TO BE SET on " + account + ", result: " + regularSubmit.engine_result);
+        } else {
+          consoleLog("regular key " + xahSourceAccount + " set on " + account + ", result: " + regularSubmit.engine_result);
+        }
+
+        if ( tesSUCCESS == true ) {
+          break 
+        } else {
+          if ( attempt > 2 ) { process.exit() };
+          logVerbose("something failed, retying, " + attempt + " of 2");
+          attempt++;
+          tesSUCCESS = true;
+          
+        };
+      }
+    } else {
+      consoleLog("skipping as its the source account...");
+    };
+    logVerbose(" ---------------- ");
+    logVerbose(" ");
+    loop++;
+  };
+  consoleLog("wallet setup complete. setting up .env file, and switching off run_wallet_setup in .env file.");
+  await updateEnv('run_wallet_setup', 'false');
+  await updateEnv('xahSourceAccount', accounts[0]);
+  await updateEnv('evrDestinationAccount', accounts[0]);
+  await updateEnv('secret', accounts_seed[0]);
+  await updateEnv('accounts', accounts.join('\n'));
+};
+
+// .env file handling  ........................................................................................................................................................................
+
+async function updateEnv(key, value) {
+  const envPath = path.resolve(__dirname, '.env');
+
+  try {
+    let envFileContent = await fs.promises.readFile(envPath, 'utf8');
+
+    // regular expression to match the key (handles cases with or without spaces around '=')
+    const regex = new RegExp(`^\\s*${key}\\s*=\\s*(.*)$`, 'm');
+
+    // Replace the key-value pair if found
+    if (regex.test(envFileContent)) {
+      envFileContent = envFileContent.replace(regex, `${key}="${value}"`);
+    } else {
+      // If key is not found, append it at the end
+      envFileContent += `\n${key}="${value}"\n`;
+    }
+    await fs.promises.writeFile(envPath, envFileContent, 'utf8');
+
+    // Reload the environment variables to reflect the change
+    dotenv.config();
+
+    logVerbose(`Updated ${key} to ${value} in .env successfully`);
+  } catch (err) {
+    console.error('Error updating .env file:', err);
+  }
+}
+
+// failure handling  ........................................................................................................................................................................
+
 async function handleFailure(account, accountFailed, filePath, accountIndex) {
   if (!accountFailed) {
     await sendFailure(account, accountIndex);
@@ -393,6 +687,8 @@ async function handleFailure(account, accountFailed, filePath, accountIndex) {
   consoleLog("ALERT, SYSTEM STOPPED " + account);
 }
 
+// email handling  ........................................................................................................................................................................
+
 async function sendFailure(account, accountIndex) {
   var subject = "Failure in Evernode heartbeat " + accountIndex.toString();
   var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")";
@@ -400,7 +696,7 @@ async function sendFailure(account, accountIndex) {
 }
 
 async function sendSuccess(account, accountIndex) {
-  var subject = "Evernode heartbeat restored " + accountIndex.toString();
+  var subject = "Evernode heartbeat restored " +  accountIndex.toString();
   var text = "Evernode heartbeat restored in account " + account + " (" + accountIndex.toString() + ")";
   await sendMail(subject, text);
 }
@@ -428,25 +724,68 @@ async function sendMail(subject, text) {
   });
 }
 
-function validate() {
+// start sections ........................................................................................................................................................................
+
+async function validate() {
+  await getAccounts();
   if (!accounts || accounts.length == 0 || accounts[0] == "") {
-    consoleLog("no accounts set in .env file.");
+    consoleLog("no accounts set");
     return false;
   }
-  if (!secret && (run_evr_withdrawal || run_xah_balance_monitor)) {
-    consoleLog("secret not set in .env file.");
+  if (!keypair && (run_transfer_funds || run_monitor_balance)) {
+    consoleLog("no secret/seed/keypair set")
     return false;
   }
   return true;
 }
 
 const main = async () => {
-  var valid = validate();
+  if (run_wallet_setup) { use_keypair_file = true };
+  const valid = await validate();
   if (valid) {
-    if (run_evr_withdrawal) { await transfer_funds() };
-    if (run_heartbeat_monitor) await monitor_heartbeat();
-    if (run_xah_balance_monitor) await monitor_balance();
+    if (run_wallet_setup) { await wallet_setup() };
+    if (run_transfer_funds) { await transfer_funds() };
+    if (run_monitor_balance) { await monitor_balance() };
+    if (run_monitor_heartbeat) { await monitor_heartbeat() };
   }
+};
+
+// check if theres any command line arguments used
+async function start(){
+  console.log("command >", command);
+  if (command) {
+    console.log("command = true")
+    if ( command == "wallet_setup" ) { use_keypair_file = true };
+    const valid = await validate();
+    if (valid) {
+      switch (command) {
+        case 'wallet_setup':
+              await wallet_setup();
+              break;
+        case 'transfer_funds':
+              await transfer_funds();
+              break;
+        case 'monitor_balance':
+              await monitor_balance();
+              break;
+        case 'monitor_heartbeat':
+              await monitor_heartbeat();
+              break;
+        default:
+            console.log(`Unknown command: ${command}`);
+            console.log('Usage: node evernode_monitor.js <command>');
+            console.log('Commands available are:');
+            console.log('  wallet_setup  - setup wallets in key_pair.txt file ready to deploy evernodes');
+            console.log('  transfer_funds  - sweep funds (EVR/XAH) to chosen account');
+            console.log('  monitor_balance  - Check balance (EVR/XAH), and top up if needed');
+            console.log('  monitor_heartbeat  - Check for recent heartbeat, and email failures');
+            break;
+      };
+    ;}
+  } else {
+    console.log("now about to run main()")
+    await main();
+  };
   client.close();
   consoleLog('Shutting down...');
   // Workaround so all queued emails are sent. 
@@ -456,5 +795,4 @@ const main = async () => {
     exit();
   }, 10000);
 };
-
-main()
+start();
