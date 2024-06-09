@@ -299,7 +299,7 @@ async function transfer_funds(){
         logVerbose("account_data -- >" + JSON.stringify(account_data) + "\nfee calculations --> feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
 
         // sweep XAH
-        if ( process.env.xah_transfer == "true" && account_data.Balance > 4000000 ) {
+        if ( process.env.xah_transfer == "true" && parseInt(account_data.Balance) > 4000000 ) {
           const XAHtx = {
             TransactionType: 'Payment',
             Account: account,
@@ -318,7 +318,7 @@ async function transfer_funds(){
           consoleLog("XAH paymentSweep sent, " + (account_data.Balance - 2000000) + "XAH " + account + " --> " + evrDestinationAccount + ", result: " + XAHsubmit.engine_result);
           };
         } else {
-          consoleLog("XAH Balance is " + account_data.Balance + " XAH, below 4 XAH which is minumum required to sweep XAH funds, skipping account...");
+          consoleLog("XAH Balance is " + account_data.Balance + " XAH, either you have XAH sweep turned off, or its below 4 XAH which is minumum required to sweep XAH funds, skipping account...");
         }
 
         
@@ -384,8 +384,8 @@ async function transfer_funds(){
     } else {
       logVerbose("skipping as its the source account.");
     };
-    logVerbose(" ---------------- ");
-    logVerbose(" ");
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
   }
 }
 
@@ -483,7 +483,7 @@ async function checkAccountHeartBeat(account, accountIndex) {
 //const wallet_setup = async () => {
 async function wallet_setup(){
   console.log(" ---------------- ");
-  consoleLog("running initial wallet setup...");
+  consoleLog("Running initial wallet setup...");
 
   var loop = 0;
   for (const account of accounts) {
@@ -519,9 +519,9 @@ async function wallet_setup(){
           const xahSubmit = await client.send({ command: 'submit', 'tx_blob': signedXrpTx });
           if (xahSubmit.engine_result !== "tesSUCCESS" && xahSubmit.engine_result !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(xahSetupamount + "XAH payment FAILED TO SEND to from " + xahSourceAccount + " xxx " + account + ", result: " + xahSubmit.engine_result);
+            consoleLog(xahSetupamount + "XAH FAILED TO SEND, " + xahSourceAccount + " xxx " + account + ", result: " + xahSubmit.engine_result);
           } else {   
-          consoleLog("payment sent, " + xahSetupamount + "XAH " + xahSourceAccount + " --> " + account + ", result: " + xahSubmit.engine_result);
+          consoleLog(xahSetupamount + " XAH sent, " + xahSourceAccount + " --> " + account + ", result: " + xahSubmit.engine_result);
           };
         }
 
@@ -555,12 +555,12 @@ async function wallet_setup(){
           }
 
           //wait for trustline to be established
-          if ( "tesSUCCESS" == "true" ) {
+          if ( tesSUCCESS == true ) {
             var truslineEstablished = false
             while (truslineEstablished == false) {
               const lines = await client.send({ command: 'account_lines', account })
               //marker = lines?.marker === marker ? null : lines?.marker
-              consoleLog(`Got ${lines.lines.length} results`)
+              logVerbose(`Got ${lines.lines.length} results`)
               lines.lines.forEach(t => {
                 if (t.account == trustlineAddress) {
                   truslineEstablished = true
@@ -633,10 +633,10 @@ async function wallet_setup(){
         };
       }
     } else {
-      consoleLog("skipping as its the source account...");
+      consoleLog("skipping " + account + " as its the source account.");
     };
-    logVerbose(" ---------------- ");
-    logVerbose(" ");
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
     loop++;
   };
   consoleLog("wallet setup complete, setting up .env file.");
@@ -655,8 +655,8 @@ async function updateEnv(key, value) {
   try {
     let envFileContent = await fs.promises.readFile(envPath, 'utf8');
 
-    // regular expression to match the key (handles cases with or without spaces around '=')
-    const regex = new RegExp(`^\\s*${key}\\s*=\\s*(.*)$`, 'm');
+    // regular expression to match the key (handles cases with or without spaces around '=', and new lines within accounts)
+    const regex = new RegExp(`^\\s*${key}\\s*=\\s*(?:"[^"]*"|[^\\n]*)$`, 'm');
 
     // Replace the key-value pair if found
     if (regex.test(envFileContent)) {
@@ -665,6 +665,7 @@ async function updateEnv(key, value) {
       // If key is not found, append it at the end
       envFileContent += `\n${key}="${value}"\n`;
     }
+    logVerbose(`Updating ${key} to ${value} in .env`);
     await fs.promises.writeFile(envPath, envFileContent, 'utf8');
 
     // Reload the environment variables to reflect the change
