@@ -25,19 +25,24 @@ The EVR destinaton account can be an exchange.
 
 ## 1. wallet_setup, is a tool to setup Wallets for use in evernode
 
-for this module it exclusively uses a `key_pair.txt` file, which uses the same format as opensource (vanity) wallet generators, so.. 
+for this module it exclusively uses a `key_pair.txt` file, which uses the same format as many opensource (vanity) wallet generators, which is; 
 
 layout per line is `Address: rzErPRJ178T5ZKN7AjVYLphYo7HP84spT      Seed: sEdVLsDtbUT44ZaovrmHvxnTCtzP8FG`
 
-for example this github is a perfect source of one, https://github.com/nhartner/xrp-vanity-address
+for example this github is a perfect source of a vanity account generator, https://github.com/nhartner/xrp-vanity-address
 
-which gives many ways to run it, with its main output is the format that key_pair.txt needs to be in
+(which gives many ways to run it, with its main output format of above, and what key_pair.txt needs to be in and why i used that format)
 
-it uses the FIRST line address/seccret, for the source for the XAH and EVR which gets sent to all other keypair lines
+FIRST line address/seccret of key_pair.txt, is used for the source of the XAH and EVR which gets sent to all other keypair lines
 
-it 1st sends `xahSetupamount` amount to activate the account, it then sets the trustline, (checks its set) then sends `evrSetupamount` amount of EVR, and finishes by setting the regular key as the source account.
+SECOND line address/secret of key_pair.txt, is used as a reputation account
 
-after it completes the above on all accounts succesfully, it then saves these addresses, to the `accounts` in the .env file, along with setting `evrDestinationAccount`, `xahSourceAccount` and `secret` of that 1st listed account.
+so when module is ran, it 1st sends `xahSetupamount` amount to activate the account, it then sets the trustline, then sends `evrSetupamount` amount of EVR, and finishes by setting the regular key as the source account.
+
+
+after it completes the above on all accounts succesfully, it then saves these addresses(not 1st line or second line of course), to the `accounts` in the .env file,
+
+along with setting `evrDestinationAccount`, and `xahSourceAccount` and `secret` of that 1st listed addresss in key_pair.txt, and then setting `reputationAccounts` with that second address in key_pair.txt
 
 (it also sets `run_wallet_setup` to false, so it doesnt get ran accidentally again)
 

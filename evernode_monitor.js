@@ -9,8 +9,9 @@ const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
-const verboseLog = process.env.verboseLog === 'true' ? true : false;
 
+// log setup  ......................................................................
+const verboseLog = process.env.verboseLog === 'true' ? true : false;
 const consoleLog = (msg) => {
     console.log(new Date().toISOString() + " " + msg)
 }
@@ -20,13 +21,71 @@ const logVerbose = (msg) => {
   }
 }
 
+//...............................................................................................................................................................................................
+// varible setups  ..............................................................................................................................................................................
+
 const command = process.argv.slice(2)[0];
 const run_wallet_setup = process.env.run_wallet_setup === 'true' ? true : false;
 const run_transfer_funds = process.env.run_transfer_funds === 'true' ? true : false;
 const run_monitor_balance = process.env.run_monitor_balance === 'true' ? true : false;
 const run_monitor_heartbeat = process.env.run_monitor_heartbeat === 'true' ? true : false;
+const use_testnet = process.env.use_testnet === 'true' ? true : false;
 
-// account handling  ........................................................................................................................................................................
+const evrSetupamount = process.env.evrSetupamount;
+const xahSetupamount = process.env.xahSetupamount;
+const feeStartAmount = process.env.fee;
+const auto_adjust_fee = process.env.auto_adjust_fee === 'true' ? true : false;
+const fee_adjust_amount = process.env.fee_adjust_amount;
+const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_last_heartbeat_alert_threshold;
+const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_minutes;
+const xah_balance_threshold = process.env.xah_balance_threshold * 1000000;
+const evr_balance_threshold = process.env.evr_balance_threshold * 1;
+const minimum_evr_transfer = process.env.minimum_evr_transfer * 1;
+const refill_amount = process.env.refill_amount * 1000000;
+const evr_refill_amount = process.env.evr_refill_amount * 1 ;
+
+let xahaud, network_id, trustlineAddress, heartbeatAccount, heartbeatClient, client;
+async function networkSetup(){
+  if (use_testnet) {
+    logVerbose("using testnet varibles");
+    xahaud = await process.env.xahaud_test;
+    network = "testnet"
+    network_id = "21338";
+    trustlineAddress="r9gYbjBfANRfA1JHfaCVfPPGfXYiqQvmhS";
+    heartbeatAccount = await process.env.heartbeatAccount_testnet;
+  } else {
+    logVerbose("using mainnet varibles");
+    xahaud = await process.env.xahaud;
+    network = "mainnet"
+    network_id = "21337";
+    trustlineAddress="rEvernodee8dJLaFsujS6q1EiXvZYmHXr8";
+    heartbeatAccount = await process.env.heartbeatAccount;
+  }
+  client = await new XrplClient(xahaud);
+
+  // setup evernode.js.client
+  const evernode = require('evernode-js-client');
+  await evernode.Defaults.useNetwork(network)
+  await evernode.Defaults.set({ rippledServer: xahaud });
+  heartbeatClient = await evernode.HookClientFactory.create(evernode.HookTypes.heartbeat);
+}
+
+// email setup  ......................................................................
+
+const smtpKey = process.env.smtpKey;
+const smtpEmail = process.env.smtpEmail;
+const destinationEmail = process.env.destinationEmail || process.env.smtpEmail;
+const transporter = createTransport({
+  host: "smtp-relay.sendinblue.com",
+  port: 587,
+  auth: {
+    user: smtpEmail,
+    pass: smtpKey,
+  },
+});
+const myDate = new Date().toUTCString();
+
+// account handling  ....................................................................
 
 let accounts = [];
 let accounts_seed = [];
@@ -49,6 +108,7 @@ async function getAccounts() {
       xahSourceAccount = accounts[0];
       evrDestinationAccount = accounts[0];
       evrDestinationAccountTag = "";
+      reputationAccounts = accounts[1]
       var secret = accounts_seed[0];
       keypair = lib.derive.familySeed(secret);
     } catch (err) {
@@ -78,55 +138,9 @@ if(process.env.reputationAccounts != "") {
   logVerbose("populating reputationAccounts -->", reputationAccounts)
 }
 
-// varible setups  ........................................................................................................................................................................
-
-const use_testnet = process.env.use_testnet === 'true' ? true : false;
-const evrSetupamount = process.env.evrSetupamount;
-const xahSetupamount = process.env.xahSetupamount;
-const feeStartAmount = process.env.fee;
-const auto_adjust_fee = process.env.auto_adjust_fee === 'true' ? true : false;
-const fee_adjust_amount = process.env.fee_adjust_amount;
-let xahaud, network_id, trustlineAddress, heartbeatAccount;
-if (use_testnet) {
-  logVerbose("using testnet varibles");
-  xahaud = process.env.xahaud_test;
-  network_id = "21338";
-  trustlineAddress="r9gYbjBfANRfA1JHfaCVfPPGfXYiqQvmhS";
-  heartbeatAccount = process.env.heartbeatAccount_testnet;
-} else {
-  logVerbose("using mainnet varibles");
-  xahaud = process.env.xahaud;
-  network_id = "21337";
-  trustlineAddress="rEvernodee8dJLaFsujS6q1EiXvZYmHXr8";
-  heartbeatAccount = process.env.heartbeatAccount;
-}
-const client = new XrplClient(xahaud);
-
-const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_last_heartbeat_alert_threshold;
-const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_minutes;
-const xah_balance_threshold = process.env.xah_balance_threshold * 1000000;
-const evr_balance_threshold = process.env.evr_balance_threshold * 1;
-const minimum_evr_transfer = process.env.minimum_evr_transfer * 1;
-const refill_amount = process.env.refill_amount * 1000000;
-const evr_refill_amount = process.env.evr_refill_amount * 1 ;
-
-// email setup  ........................................................................................................................................................................
-
-const smtpKey = process.env.smtpKey;
-const smtpEmail = process.env.smtpEmail;
-const destinationEmail = process.env.destinationEmail || process.env.smtpEmail;
-const transporter = createTransport({
-  host: "smtp-relay.sendinblue.com",
-  port: 587,
-  auth: {
-    user: smtpEmail,
-    pass: smtpKey,
-  },
-});
-const myDate = new Date().toUTCString();
-
-
+//...............................................................................................................................................................................................
 // Main balance monitor  ........................................................................................................................................................................
+
 async function monitor_balance(){
   console.log(" ---------------- ");
   consoleLog("Monitoring the account XAH balance...");
@@ -149,7 +163,7 @@ async function monitor_balance(){
     var sequence = sourceData.account_data.Sequence;
 
     if (account != xahSourceAccount) {
-        logVerbose("Balance for account " + account + " is " + account_data.Balance);
+      logVerbose("Balance for account " + account + " is " + account_data.Balance);
       if (parseInt(account_data.Balance) < xah_balance_threshold) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
         consoleLog("Account balance for " + account + " is " + account_data.Balance + ", sending funds");
@@ -186,6 +200,8 @@ async function monitor_balance(){
           sequence++;
 
         }
+      } else {
+        logVerbose("Balance for account " + account + " is " + account_data.Balance + " below threshold");
       }
 
     }
@@ -248,6 +264,8 @@ async function monitor_balance(){
             sequence++;
 
           }
+        } else {
+          consoleLog("Account EVR balance for " + account + " is " + balance + " below threshold");
         }
 
       }
@@ -277,9 +295,9 @@ async function GetEvrBalance(account){
   return balance;
 }
 
-// Fund Sweeper  ........................................................................................................................................................................
+//.................................................................................................................................................................................................
+// Fund Sweeper  ..................................................................................................................................................................................
 
-//const transfer_funds = async () => {
 async function transfer_funds(){
   console.log(" ---------------- ");
   consoleLog("Starting the funds transfer batch...");
@@ -389,26 +407,30 @@ async function transfer_funds(){
   }
 }
 
+//.................................................................................................................................................................................................
 // Main heartbeat monitor  ........................................................................................................................................................................
 
-//const monitor_heartbeat = async () => {
 async function monitor_heartbeat() {
   console.log(" ---------------- ");
   consoleLog("Checking account heartbeat...");
+  heartbeatClientstatus = await heartbeatClient.connect();
+  logVerbose("connecting to ledger/evernode registry, status:" + heartbeatClientstatus);
+
   var accountIndex = 1;
   for (const account of accounts) {
-    logVerbose("checking account heartbeat on account " + account);
+    consoleLog("checking account heartbeat on account " + account);
     await checkAccountHeartBeat(account, accountIndex);
     accountIndex++;
     consoleLog(" ---------------- ");
   }
+  heartbeatClientstatus = await heartbeatClient.disconnect();
+  logVerbose("all finished, disconnecting to ledger/evernode registry, status:" + heartbeatClientstatus);
 }
 
 function getMinutesBetweenDates(startDate, endDate) {
   const diff = endDate - startDate;
   return (diff / 60000);
 }
-
 
 async function checkAccountHeartBeat(account, accountIndex) {
   var ledgerIndex = -1;
@@ -427,57 +449,76 @@ async function checkAccountHeartBeat(account, accountIndex) {
   }
 
   while (true) {
-    let marker = '';
-    const l = [];
-    while (typeof marker === 'string') {
-      logVerbose("getting last 5 transactions on account " + account + " with last ledger " + ledgerIndex);
-      const response = await client.send({
-        "id": 2,
-        "command": "account_tx",
-        "account": account,
-        "ledger_index_min": -1,
-        "ledger_index_max": ledgerIndex,
-        "binary": false,
-        "limit": 5,
-        "forward": false, marker: marker === '' ? undefined : marker
-      })
-      marker = response?.marker === marker ? null : response?.marker
-      // It gets the last 5 transactions and looks for the last heartbeat
-      var i = 0;
-      for (var tIndex = 0; tIndex < response.transactions.length; tIndex++) {
-        var transaction = response.transactions[tIndex];
-        ledgerIndex = transaction.tx.ledger_index - 1;
-        logVerbose(JSON.stringify(transaction.tx));
-        logVerbose(tIndex + " " +  2 +  " new ledgerIndex = " + ledgerIndex);
-        var utcMilliseconds = 1000 * (transaction.tx.date + 946684800);
-        var transactionDate = new Date(0); // The 0 there is the key, which sets the date to the epoch
-        var date = new Date();
-        var now_utc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(),
-          date.getUTCDate(), date.getUTCHours(),
-          date.getUTCMinutes(), date.getUTCSeconds());
-        if (now_utc - utcMilliseconds > 1000 * 60 * minutes_from_last_heartbeat_alert_threshold) {
-          consoleLog("Handling failure for too old heartbeat transaction, account failed = " + accountFailed);
-          await handleFailure(account, accountFailed, filePath, accountIndex);
-          return;
-        }
-        if (transaction.tx.Destination == heartbeatAccount) {
-          //consoleLog("System running regularly " + account + "");
-          if (fs.existsSync(filePath)) {
-            await sendSuccess(account, accountIndex);
-            fs.rmSync(filePath);
-          }
-          return;
-        }
+    const hostInfo = await heartbeatClient.getHostInfo(account);
+    let currentTimestamp = Math.floor(Date.now() / 1000);
+    if (hostInfo){logVerbose("hostInfo ->" + hostInfo.lastHeartbeatIndex)} else { logVerbose("hostinfo ->not found") };
+    logVerbose("time now -->" + currentTimestamp);
+
+    if (!hostInfo || (currentTimestamp - hostInfo.lastHeartbeatIndex > 60 * minutes_from_last_heartbeat_alert_threshold)) {
+      consoleLog("Handling failure for too old heartbeat transaction, previous data foe account? :" + accountFailed);
+      await handleFailure(account, accountFailed, filePath, accountIndex);
+      return;
+    } else {
+      const hoursElapsed = Math.floor((currentTimestamp - hostInfo.lastHeartbeatIndex)/ 3600);
+      const minutesElapsed = Math.floor(((currentTimestamp - hostInfo.lastHeartbeatIndex) % 3600) / 60);
+      consoleLog("heartbeat on this account looks good, last heartbeat was " + hoursElapsed + " hours and " + minutesElapsed + " minuets ago.");
+      if (fs.existsSync(filePath)) {
+        await sendSuccess(account, accountIndex);
+        fs.rmSync(filePath);
       }
-      if (response.transactions.length < 5) {
-        consoleLog("Handling failure for no heartbeat transactions, account failed = " + accountFailed);
-        await handleFailure(account, accountFailed, filePath);
-        return;
-      }
+      return;
     }
   }
 }
 
+// HEARTBEAT failure handling  ........................................................................................................................................................................
+
+async function handleFailure(account, accountFailed, filePath, accountIndex) {
+  if (!accountFailed) {
+    await sendFailure(account, accountIndex);
+    fs.writeFileSync(filePath, new Date().toString())
+  }
+  consoleLog("ALERT, SYSTEM STOPPED " + account);
+}
+
+// HEARBEAT email handling  ........................................................................................................................................................................
+
+async function sendFailure(account, accountIndex) {
+  var subject = "Failure in Evernode heartbeat " + accountIndex.toString();
+  var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")";
+  await sendMail(subject, text);
+}
+
+async function sendSuccess(account, accountIndex) {
+  var subject = "Evernode heartbeat restored " +  accountIndex.toString();
+  var text = "Evernode heartbeat restored in account " + account + " (" + accountIndex.toString() + ")";
+  await sendMail(subject, text);
+}
+
+async function sendMail(subject, text) {
+  var mailOptions = {
+    from: smtpEmail,
+    to: destinationEmail,
+    subject: subject,
+    text: text
+  };
+  consoleLog("SENDING MAIL " + JSON.stringify(mailOptions));
+
+  if (!smtpEmail) {
+    consoleLog("smtp email not set in .env file. Email is not sent");
+    return;
+  }
+
+  await transporter.sendMail(mailOptions, function (error, info) {
+    if (error) {
+      consoleLog(error);
+    } else {
+      consoleLog('Email sent: ' + info.response);
+    }
+  });
+}
+
+//...............................................................................................................................................................................................
 // Initial wallet setup  ........................................................................................................................................................................
 
 //const wallet_setup = async () => {
@@ -643,8 +684,9 @@ async function wallet_setup(){
   await updateEnv('run_wallet_setup', 'false');
   await updateEnv('xahSourceAccount', accounts[0]);
   await updateEnv('evrDestinationAccount', accounts[0]);
+  await updateEnv('reputationAccounts', accounts[1]);
   await updateEnv('secret', accounts_seed[0]);
-  await updateEnv('accounts', accounts.join('\n'));
+  await updateEnv('accounts', accounts.split(2).join('\n'));
 };
 
 // .env file handling  ........................................................................................................................................................................
@@ -677,53 +719,7 @@ async function updateEnv(key, value) {
   }
 }
 
-// failure handling  ........................................................................................................................................................................
-
-async function handleFailure(account, accountFailed, filePath, accountIndex) {
-  if (!accountFailed) {
-    await sendFailure(account, accountIndex);
-    fs.writeFileSync(filePath, new Date().toString())
-  }
-  consoleLog("ALERT, SYSTEM STOPPED " + account);
-}
-
-// email handling  ........................................................................................................................................................................
-
-async function sendFailure(account, accountIndex) {
-  var subject = "Failure in Evernode heartbeat " + accountIndex.toString();
-  var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")";
-  await sendMail(subject, text);
-}
-
-async function sendSuccess(account, accountIndex) {
-  var subject = "Evernode heartbeat restored " +  accountIndex.toString();
-  var text = "Evernode heartbeat restored in account " + account + " (" + accountIndex.toString() + ")";
-  await sendMail(subject, text);
-}
-
-async function sendMail(subject, text) {
-  var mailOptions = {
-    from: smtpEmail,
-    to: destinationEmail,
-    subject: subject,
-    text: text
-  };
-  consoleLog("SENDING MAIL " + JSON.stringify(mailOptions));
-
-  if (!smtpEmail) {
-    consoleLog("smtp email not set in .env file. Email is not sent");
-    return;
-  }
-
-  await transporter.sendMail(mailOptions, function (error, info) {
-    if (error) {
-      consoleLog(error);
-    } else {
-      consoleLog('Email sent: ' + info.response);
-    }
-  });
-}
-
+//........................................................................................................................................................................................
 // start sections ........................................................................................................................................................................
 
 async function validate() {
@@ -752,9 +748,8 @@ const main = async () => {
 
 // check if theres any command line arguments used
 async function start(){
-  logVerbose("command >", command);
+  await networkSetup();
   if (command) {
-    logVerbose("command = true")
     if ( command == "wallet_setup" ) { use_keypair_file = true };
     const valid = await validate();
     if (valid) {
@@ -783,7 +778,6 @@ async function start(){
       };
     ;}
   } else {
-    console.log("now about to run main()")
     await main();
   };
   client.close();
