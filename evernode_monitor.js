@@ -43,6 +43,7 @@ const evr_balance_threshold = process.env.evr_balance_threshold * 1;
 const minimum_evr_transfer = process.env.minimum_evr_transfer * 1;
 const refill_amount = process.env.refill_amount * 1000000;
 const evr_refill_amount = process.env.evr_refill_amount * 1 ;
+let hostMinInstanceCount, hostMaxLeaseAmount, hostReputationThreshold;
 
 let xahaud, network_id, trustlineAddress, heartbeatAccount, heartbeatClient, client;
 async function networkSetup(){
@@ -129,6 +130,7 @@ async function getAccounts() {
       keypair = lib.derive.familySeed(secret);
     } else {
       console.error('Error reading secret from .env file');
+      process.exit();
     }
     if(await process.env.reputationAccounts != "") {
       reputationAccounts = process.env.reputationAccounts.split('\n');
@@ -411,9 +413,14 @@ async function transfer_funds(){
 
 async function monitor_heartbeat() {
   console.log(" ---------------- ");
-  consoleLog("Checking account heartbeat...");
+  consoleLog("Checking account heartbeats...");
   heartbeatClientstatus = await heartbeatClient.connect();
+  hostMinInstanceCount = await heartbeatClient.config.rewardConfiguration.hostMinInstanceCount
+  hostMaxLeaseAmount = await parseFloat(heartbeatClient.config.rewardInfo.hostMaxLeaseAmount)
+  hostReputationThreshold = await heartbeatClient.config.rewardConfiguration.hostReputationThreshold
   logVerbose("connecting to ledger/evernode registry, status:" + heartbeatClientstatus);
+  consoleLog("Evernode Info, Minimum instance count at :" + hostMinInstanceCount + " Max Lease amount at :" + hostMaxLeaseAmount + " and Reuputation threshold is at:" + hostReputationThreshold)
+  consoleLog(" ---------------- ");
 
   var accountIndex = 1;
   for (const account of accounts) {
@@ -454,43 +461,68 @@ async function checkAccountHeartBeat(account, accountIndex) {
     logVerbose("time now -->" + currentTimestamp);
 
     if (!hostInfo || (currentTimestamp - hostInfo.lastHeartbeatIndex > 60 * minutes_from_last_heartbeat_alert_threshold)) {
-      consoleLog("Handling failure for too old heartbeat transaction, previous data foe account? :" + accountFailed);
-      await handleFailure(account, accountFailed, filePath, accountIndex);
+      consoleLog("Handling failure for too old heartbeat transaction, previous data held for account? :" + accountFailed);
+      if (!hostInfo) { var faultInfo = "fault" } else { var faultInfo = "heartbeat"; consoleLog("reputation stats ... maxInstances " + hostInfo.maxInstances + " >= " + hostMinInstanceCount + ", leaseAmount " + hostInfo.leaseAmount + " < " + hostMaxLeaseAmount + ", reputation " + hostInfo.hostReputation + " >= " + hostReputationThreshold); };
+      await handleFailure(account, accountFailed, filePath, accountIndex, hostInfo, faultInfo );
       return;
     } else {
       const hoursElapsed = Math.floor((currentTimestamp - hostInfo.lastHeartbeatIndex)/ 3600);
       const minutesElapsed = Math.floor(((currentTimestamp - hostInfo.lastHeartbeatIndex) % 3600) / 60);
-      consoleLog("heartbeat on this account looks good, last heartbeat was " + hoursElapsed + " hours and " + minutesElapsed + " minuets ago.");
+      consoleLog("heartbeat on this account looks good, last heartbeat was " + hoursElapsed + " hours and " + minutesElapsed + " minutes ago.");
       if (fs.existsSync(filePath)) {
         await sendSuccess(account, accountIndex);
         fs.rmSync(filePath);
       }
       return;
     }
+
+    if ((hostInfo.maxInstances >= hostMinInstanceCount) || (hostInfo.leaseAmount < hostMaxLeaseAmount) || (hostReputation >= hostReputationThreshold)) {
+      let faultInfo = "stats ... maxInstances "+ hostInfo.maxInstances + " >= "+ hostMinInstanceCount + ", leaseAmount " + hostInfo.leaseAmount + " < " + hostMaxLeaseAmount + ", reputation " + hostInfo.hostReputation + " >= " + hostReputationThreshold;
+      consoleLog("reputation stat fault detected, previous data held for account? :" + accountFailed);
+      consoleLog(faultStats)
+      await handleFailure(account, accountFailed, filePath, accountIndex, hostInfo, faultInfo);
+      return;
+    } else {
+      consoleLog("reputation stats look good, maxInstances "+ hostInfo.maxInstances + " <= "+ hostMinInstanceCount + ", leaseAmount " + hostInfo.leaseAmount + " > " + hostMaxLeaseAmount + ", reputation " + hostInfo.hostReputation + " <= " + hostReputationThreshold );
+      if (fs.existsSync(filePath)) {
+        await sendSuccess(account, accountIndex);
+        fs.rmSync(filePath);
+      }
+      return;
+    }
+
   }
 }
 
 // HEARTBEAT failure handling  ........................................................................................................................................................................
 
-async function handleFailure(account, accountFailed, filePath, accountIndex) {
+async function handleFailure(account, accountFailed, filePath, accountIndex, hostInfo, faultInfo) {
   if (!accountFailed) {
-    await sendFailure(account, accountIndex);
+    await sendFailure(account, accountIndex, hostInfo, faultInfo);
     fs.writeFileSync(filePath, new Date().toString())
   }
-  consoleLog("ALERT, SYSTEM STOPPED " + account);
+  consoleLog("ALERT, DETECTED A EVERNODE DOWN from account" + account);
 }
 
 // HEARBEAT email handling  ........................................................................................................................................................................
 
-async function sendFailure(account, accountIndex) {
-  var subject = "Failure in Evernode heartbeat " + accountIndex.toString();
-  var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")";
+async function sendFailure(account, accountIndex, hostInfo, faultInfo) {
+  if ( faultInfo == "fault" ) {
+    var subject = "Fault in Evernode monitor on " + accountIndex.toString();
+    var text = "Fault in Evernode monitor account " + account + " (" + accountIndex.toString() + ")";
+  } else if ( faultInfo == "heartbeat" ) {
+    var subject = "Failure in Evernode heartbeat on " + hostInfo.domain;
+    var text = "Failure in retrieving Evernode heartbeat for account " + account + " (" + accountIndex.toString() + ")\n with domain ${hostInfo.domain}\n\n full info ${hostInfo}";
+  } else {
+    var subject = "problem in Evernode monitor stats, on account " + hostInfo.domain;
+    var text = "problem with a ruputation stat for account " + account + " (" + accountIndex.toString() + ")\n with domain ${hostInfo.domain}\n\n stats ${faultInfo}\nfull info ${hostInfo}";
+  };
   await sendMail(subject, text);
 }
 
 async function sendSuccess(account, accountIndex) {
-  var subject = "Evernode heartbeat restored " +  accountIndex.toString();
-  var text = "Evernode heartbeat restored in account " + account + " (" + accountIndex.toString() + ")";
+  var subject = "Evernode heartbeat monitor restored " +  accountIndex.toString();
+  var text = "Evernode heartbeat monitor restored in account " + account + " (" + accountIndex.toString() + ")";
   await sendMail(subject, text);
 }
 
