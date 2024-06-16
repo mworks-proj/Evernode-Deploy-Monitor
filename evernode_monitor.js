@@ -686,7 +686,8 @@ async function wallet_setup(){
   await updateEnv('evrDestinationAccount', accounts[0]);
   await updateEnv('reputationAccounts', accounts[1]);
   await updateEnv('secret', accounts_seed[0]);
-  await updateEnv('accounts', accounts.split(2).join('\n'));
+  let saveAccounts = accounts.split(2)
+  await updateEnv('accounts', saveAccounts.join('\n'));
 };
 
 // .env file handling  ........................................................................................................................................................................
