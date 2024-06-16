@@ -108,7 +108,7 @@ async function getAccounts() {
       xahSourceAccount = accounts[0];
       evrDestinationAccount = accounts[0];
       evrDestinationAccountTag = "";
-      reputationAccounts = accounts[1]
+      reputationAccounts = [ accounts[1] ];
       var secret = accounts_seed[0];
       keypair = lib.derive.familySeed(secret);
     } catch (err) {
@@ -129,14 +129,13 @@ async function getAccounts() {
     } else {
       console.error('Error reading secret from .env file');
     }
+    var reputationAccounts = [];
+    if(await process.env.reputationAccounts != "") {
+      reputationAccounts = process.env.reputationAccounts.split('\n');
+    }
   }
 }
 
-var reputationAccounts =[];
-if(process.env.reputationAccounts != "") {
-  reputationAccounts = process.env.reputationAccounts.split('\n');
-  logVerbose("populating reputationAccounts -->", reputationAccounts)
-}
 
 //...............................................................................................................................................................................................
 // Main balance monitor  ........................................................................................................................................................................
