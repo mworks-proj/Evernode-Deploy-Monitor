@@ -93,6 +93,7 @@ let keypair = ""
 let xahSourceAccount;
 let evrDestinationAccount = "";
 let evrDestinationAccountTag = "";
+var reputationAccounts = [];
 async function getAccounts() {
   consoleLog("gettings accounts...");
   const use_keypair_file = process.env.use_keypair_file;
@@ -129,7 +130,6 @@ async function getAccounts() {
     } else {
       console.error('Error reading secret from .env file');
     }
-    var reputationAccounts = [];
     if(await process.env.reputationAccounts != "") {
       reputationAccounts = process.env.reputationAccounts.split('\n');
     }
