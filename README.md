@@ -13,36 +13,51 @@ If you have many nodes, using this script you will have to check only one accoun
 
 It is made of 4 modules:
 
-1. wallet_setup, to setup new un-activated wallets, to be fully ready for evernode (activateing, settng trustline, sending EVR, settng regularkey, pushing data to .ev file)
-2. transfer_funds, Move all EVR/XAH from your node accounts to a single account.
-3. monitor_balance, and Send EVR/XAH to your Evernode accounts when the balance is below a certain threshold (configurable).
-4. monitor_heartbeat, the heartbeat of all your nodes and send an alert email in case no heartbeat was sent in the last N (configurable) minutes.
+1. wallet_setup, used to setup new un-activated wallets, so they are fully ready for evernode install (activating, settng trustline, sending EVR, settng regularkey, pushing data to .ev file)
+2. transfer_funds, Move all EVR/XAH from your node accounts to source account.
+3. monitor_balance, check and send EVR/XAH to your accounts when the balance is below a certain threshold (configurable).
+4. monitor_heartbeat, cheaks hook heartbeats of your nodes, and sends an alert email in case no heartbeat was sent in the last N (configurable) minutes.
 
+source, and destination accounts can be one of your evernode accounts or a unique address of your choice.
 
-The hub accounts can be one of your evernode accounts or another one of your choice. 
-
-The EVR destinaton account can be an exchange. 
+and the EVR destinaton account, can be an exchange as tag is supported.
 
 ## 1. wallet_setup, is a tool to setup Wallets for use in evernode
 
-for this module it exclusively uses a `key_pair.txt` file, which uses the same format as many opensource (vanity) wallet generators, which is; 
+for this module it exclusively uses a `key_pair.txt` file, 
+
+which uses the same format as many opensource (vanity) wallet generators, which is; 
 
 layout per line is `Address: rzErPRJ178T5ZKN7AjVYLphYo7HP84spT      Seed: sEdVLsDtbUT44ZaovrmHvxnTCtzP8FG`
 
-for example this github is a perfect source of a vanity account generator, https://github.com/nhartner/xrp-vanity-address
+for example this github is a perfect source of a vanity account generator,
+
+https://github.com/nhartner/xrp-vanity-address
 
 (which gives many ways to run it, with its main output format of above, and what key_pair.txt needs to be in and why i used that format)
 
-FIRST line address/seccret of key_pair.txt, is used for the source of the XAH and EVR which gets sent to all other keypair lines
+FIRST line address/seccret of key_pair.txt, 
 
-SECOND line address/secret of key_pair.txt, is used as a reputation account
+is used for the source of the XAH and EVR which gets sent to all other keypair lines
 
-so when module is ran, it 1st sends `xahSetupamount` amount to activate the account, it then sets the trustline, then sends `evrSetupamount` amount of EVR, and finishes by setting the regular key as the source account.
+SECOND line address/secret of key_pair.txt, 
+
+is used as a reputation account
 
 
-after it completes the above on all accounts succesfully, it then saves these addresses(not 1st line or second line of course), to the `accounts` in the .env file,
+so when module is ran, 
 
-along with setting `evrDestinationAccount`, and `xahSourceAccount` and `secret` of that 1st listed addresss in key_pair.txt, and then setting `reputationAccounts` with that second address in key_pair.txt
+it 1st sends `xahSetupamount` amount to activate the account, 
+
+it then sets the trustline, then sends `evrSetupamount` amount of EVR, 
+
+and finishes by setting the regular key as the source account.
+
+after it completes the above on all accounts succesfully, 
+
+it then saves these addresses(not 1st line or second line of course), to the `accounts` in the .env file,
+
+along with setting `evrDestinationAccount`, and `xahSourceAccount` and `secret` of that 1st listed addresss, and then setting `reputationAccounts` with that second address in key_pair.txt
 
 (it also sets `run_wallet_setup` to false, so it doesnt get ran accidentally again)
 
@@ -64,7 +79,7 @@ Setting the same regular key on a Xahau account list will let you sign the trans
 
 ## 3. monitor_balance, Send XAH/EVR to the account if balance is too low
 
-As a minimum numer of XAH is required to run an evernode host, this script sends N (configurable) XAH from the first account when the balance is below a certain threshold (configurable). In case the first account balance is too low to send XAH, an alert email is sent to the configured email. This means you will only have to check the first account XAH balance and you can ignore the others that are automatically filled when needed.
+As a minimum amount of XAH is required to run an evernode host, this script sends N (configurable) XAH from the first account when the balance is below a certain threshold (configurable). In case the first account balance is too low to send XAH, an alert email is sent to the configured email. This means you will only have to check the first account XAH balance and you can ignore the others that are automatically filled when needed.
 
 The module also manages the reputation accounts XAH and EVR balance.  
 
