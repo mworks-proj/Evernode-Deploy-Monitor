@@ -70,11 +70,28 @@ The module also manages the reputation accounts XAH and EVR balance.
 
 ## 4. monitor_heartbeat, will Monitor the heartbeat
 
-This script cycles through your accounts and checks whether each account sent a heartbeat transaction in the last N (configurable) minutes. In case no heartbeat is found an alert email is sent to the configured email address. The alert email is repeated after N (configurable) minutes in case the down is not solved. A restore email is sent as soon as the issue is solved.
+This script cycles through your accounts and checks whether each account sent a heartbeat transaction in the last N (configurable) minutes.
+In cases where no heartbeat is found an alert is sent,
+two alert types can be confinured;
+ - to a configured email address, 
+ where the alert email is repeated after N (configurable) minutes in case the down is not solved. A restore email is sent as soon as the issue is solved.
+ - to a configured "uptime robot" / "uptime kuma", via a push URL monitor type
 
-## SMTP server
+#### SMTP server
 
 In order to send emails from the script you need an SMTP server. Follow these instruction to setup your free account in BREVO: https://www.programonaut.com/how-to-send-an-email-in-node-js-using-an-smtp-step-by-step/. 
+
+#### Uptime robot / kuma
+
+- uptime robot, can be found and signed upto here, https://uptimerobot.com/ you would need the paid version to get "heartbeat monitoring" to support the type this uses
+
+- uptime kuma, can be found on github here, where there are simple install instructions, https://github.com/louislam/uptime-kuma this is the free open source, self host, of uptime robot
+follow install intsructions above, once created logins etc, you "add new monitor", selecting "push" monitor type, which is under the passive listing, fill in frendly name, use 1800 seconds (30 mins), 
+then paste/use the "Push URL" in the .env file, as below
+
+once configured, you add the push URLs within the `push_addresses` section in the .env file, in a list form like you do in the `accounts` section.
+push_addresses, should ONLY incluse the URL and NOT the query, so DO NOT include the `?status=up&msg=OK&ping=` part of the URL, for example could look like this, http://192.168.0.100:3001/api/push/Cyn0DuXkVi
+where each line indexes and corrosponds to the accounts line. so the 1st listed URL in push_addresses will be used for the 1st listed account, and 2nd listed for 2nd account etc etc... 
 
 # Install & run
 
@@ -116,17 +133,18 @@ OR you can run each individual "module" seperatly with `node evernode_monitor.js
 node evernode_monitor.js transfer_funds
 ```
 
-You can now setup a scheduled task that runs the script regularly using Cron.
+You can now setup a scheduled task that runs the script regularly using cronjob.
 
-and you can even tailer different cronjobs to happen at different times, using the module name after.
+where you can even tailer different cronjobs to happen at different times, using the module name after.
 
-The example below runs the transfer script every 30 minutes and logs the results to a file called log.log
+The example below runs the monitor_heartbeat script every 30 minutes (and logs the results to a file called logs.log)
+which would typically used for the setup to support uptime kuma
 
 crontab -e
 
-0,30 * * * * /usr/bin/node /root/evernode_monitor/evernode_monitor.js >> /root/evernode_monitor/log.log
+0,30 * * * * /usr/bin/node /root/evernode_monitor/evernode_monitor.js monitor_heartbeat >> /root/evernode_monitor/logs.log
 
-Cron documentation: https://www.cherryservers.com/blog/how-to-use-cron-to-automate-linux-jobs-on-ubuntu-20-04
+some cron documentation: https://www.cherryservers.com/blog/how-to-use-cron-to-automate-linux-jobs-on-ubuntu-20-04
 
 ## Update to last version
 
