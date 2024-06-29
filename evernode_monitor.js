@@ -99,7 +99,6 @@ const transporter = createTransport({
 
 const push_notification = process.env.push_notification === 'true' ? true : false;
 const push_addresses = process.env.push_addresses.split('\n');
-console.log("push.on: " + push_notification + " push.adds :" + push_addresses)
 
 // account handling  ....................................................................
 
