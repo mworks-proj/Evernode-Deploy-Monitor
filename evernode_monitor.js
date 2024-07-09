@@ -478,10 +478,11 @@ async function checkAccountHeartBeat(account, accountIndex) {
     return;
   };
 
+  logVerbose(`full hostInfo -->${JSON.stringify(hostInfo)}`);
   const daysElapsed = Math.floor((currentTimestamp - hostInfo.lastHeartbeatIndex) / (3600 * 24));
   const hoursElapsed = Math.floor(((currentTimestamp - hostInfo.lastHeartbeatIndex)% (3600 * 24)) / 3600);
   const minutesElapsed = Math.floor(((currentTimestamp - hostInfo.lastHeartbeatIndex) % 3600) / 60);
-  var hostInfoSTR = `last heartbeat ${daysElapsed} days ${hoursElapsed} hours and ${minutesElapsed} minutes ago, maxInstances ${hostInfo.maxInstances} (>=${hostMinInstanceCount}), leaseAmount ${hostInfo.leaseAmount} (<${hostMaxLeaseAmount}), reputation ${hostInfo.hostReputation} (>=${hostReputationThreshold})`
+  var hostInfoSTR = `last heartbeat ${daysElapsed} days ${hoursElapsed} hours and ${minutesElapsed} minutes ago, activeInstances:${hostInfo.activeInstances} maxInstances:${hostInfo.maxInstances} (>=${hostMinInstanceCount}), leaseAmount ${hostInfo.leaseAmount} (<${hostMaxLeaseAmount}), reputation ${hostInfo.hostReputation} (>=${hostReputationThreshold})`
   
   if (currentTimestamp - hostInfo.lastHeartbeatIndex > 60 * minutes_from_last_heartbeat_alert_threshold) {
     var faultReason = "heartbeat";
