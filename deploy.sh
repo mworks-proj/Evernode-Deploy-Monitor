@@ -658,7 +658,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
 
       Do you want to use the above settings to check registrations?" 25 100; then
           clear
-          node evernode_monitor.js claim_rewards
+          node evernode_monitor.js claim_reward
           echo ""
           read -n 1 -s -r -p "Press any key to continue..."
         fi
