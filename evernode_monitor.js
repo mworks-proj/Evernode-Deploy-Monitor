@@ -260,7 +260,7 @@ async function monitor_balance(){
   if (reputationAccounts != [] ) {
     console.log("")
     consoleLog(" ######### ")
-    consoleLong("")
+    consoleLog("")
     consoleLog("checking EVR levels on " + reputationAccounts.length + " reputation accounts...");
     for (const account of reputationAccounts) {
 
