@@ -1,5 +1,6 @@
 const { XrplClient } = require('xrpl-client')
 const lib = require('xrpl-accountlib');
+const { decode } = require('xrpl-binary-codec-prerelease');
 const { exit } = require('process');
 const { createTransport } = require('nodemailer');
 const { ALPN_ENABLED } = require('constants');
@@ -39,6 +40,7 @@ const run_wallet_setup = process.env.run_wallet_setup === 'true' ? true : false;
 const run_transfer_funds = process.env.run_transfer_funds === 'true' ? true : false;
 const run_monitor_balance = process.env.run_monitor_balance === 'true' ? true : false;
 const run_monitor_heartbeat = process.env.run_monitor_heartbeat === 'true' ? true : false;
+const run_monitor_claimreward = process.env.run_monitor_claimreward === 'true' ? true : false;
 const use_testnet = process.env.use_testnet === 'true' ? true : false;
 
 const evrSetupamount = process.env.evrSetupamount;
@@ -47,11 +49,13 @@ const set_regular_key = process.env.set_regular_key === 'true' ? true : false;
 const feeStartAmount = process.env.fee;
 const auto_adjust_fee = process.env.auto_adjust_fee === 'true' ? true : false;
 const fee_adjust_amount = process.env.fee_adjust_amount;
+const fee_max_amount = process.env.fee_max_amount;
 const minutes_from_last_heartbeat_alert_threshold = process.env.minutes_from_last_heartbeat_alert_threshold;
 const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_minutes;
 const xah_balance_threshold = process.env.xah_balance_threshold;
 const evr_balance_threshold = process.env.evr_balance_threshold;
 const minimum_evr_transfer = process.env.minimum_evr_transfer;
+const xah_transfer_reserve = process.env.xah_transfer_reserve;
 const xah_refill_amount = process.env.xah_refill_amount;
 const evr_refill_amount = process.env.evr_refill_amount;
 let hostMinInstanceCount, hostMaxLeaseAmount, hostReputationThreshold;
@@ -103,43 +107,56 @@ const push_addresses = process.env.push_addresses.split('\n');
 // account handling  ....................................................................
 
 let accounts = [];
-let accounts_seed = [];
+let account_seeds = [];
 let keypair = "";
 let use_keypair_file = ""; 
-let xahSourceAccount;
+let sourceAccount;
 let evrDestinationAccount = "";
 let evrDestinationAccountTag = "";
 let reputationAccounts = [];
+let reputationaccount_seeds = [];
+
 async function getAccounts() {
   consoleLog("gettings accounts...");
   use_keypair_file = process.env.use_keypair_file === 'true' ? true : false;
+  if ( command == "wallet_setup" ) { use_keypair_file = true };
   const keypair_file = process.env.keypair_file;
-  if (use_keypair_file) {
+  const keypair_rep_file = process.env.keypair_rep_file;
+  if (use_keypair_file)  {
     try {
-      logVerbose("using key_pair.txt for accounts");
-      const data = await fs.promises.readFile(keypair_file, 'utf8');
-      accounts = await data.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
-      accounts_seed = await data.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
-      logVerbose("accounts string = " + accounts);
-      logVerbose("accounts length = " + accounts.length);
-      xahSourceAccount = accounts[0];
+      consoleLog(`using ${keypair_file} for account pairs, with 1st line as sourceAccount`);
+      const accountsdata = await fs.promises.readFile(keypair_file, 'utf8');
+      accounts = await accountsdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      account_seeds = await accountsdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      } catch (err) {
+      console.error(`Error reading ${key_pair} file:`);
+      logVerbose("error returned ->" + err)
+    }
+    try {
+      logVerbose(`and ${keypair_rep_file} for reputation account pairs`);
+      const repdata = await fs.promises.readFile(keypair_rep_file, 'utf8');
+      reputationAccounts = await repdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      reputationaccount_seeds = await repdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
+      } catch (err) {
+      console.error(`Error reading ${keypair_rep_file} file:`);
+      logVerbose("error returned ->" + err)
+    }
+      consoleLog("number of accounts found = " + accounts.length);
+      consoleLog("number of reputationAccounts found = " + reputationAccounts.length);
+      logVerbose(`account strings -->${accounts},\n and reputation accounts -->${reputationAccounts}`);
+      logVerbose(`seed strings -->${account_seeds},\n and reputation seeds -->${reputationaccount_seeds}`);
+      sourceAccount = accounts[0];
       evrDestinationAccount = accounts[0];
       evrDestinationAccountTag = "";
-      reputationAccounts = [ accounts[1] ];
-      var secret = accounts_seed[0];
+      var secret = account_seeds[0];
       keypair = lib.derive.familySeed(secret);
-    } catch (err) {
-      console.error('Error reading key_pair.txt file:', err);
-      accounts = [];
-    }
   } else {
-    logVerbose("using .env file for accounts");
-    xahSourceAccount = process.env.xahSourceAccount;
+    consoleLog("using .env file for source Account, accounts, reputation accounts, and regular key for their access.");
+    sourceAccount = process.env.sourceAccount;
     evrDestinationAccount = process.env.evrDestinationAccount;
     evrDestinationAccountTag = process.env.evrDestinationAccountTag;
     accounts = process.env.accounts.split('\n');
-    logVerbose("accounts string = " + accounts);
-    logVerbose("accounts length = " + accounts.length);
+    consoleLog("number of accounts found = " + accounts.length);
     if (process.env.secret) {
       var secret = process.env.secret;
       keypair = lib.derive.familySeed(secret);
@@ -150,65 +167,83 @@ async function getAccounts() {
     if(await process.env.reputationAccounts != "") {
       reputationAccounts = process.env.reputationAccounts.split('\n');
     }
+    consoleLog("number of reputationAccounts found = " + reputationAccounts.length);
+    logVerbose(`account strings -->${accounts},\n and reputation accounts -->${reputationAccounts}`);
+    logVerbose(`sourceAccount -->${sourceAccount},\n and secret -->${secret}`);
   }
 }
 
 
 //...............................................................................................................................................................................................
-// Main balance monitor  ........................................................................................................................................................................
+// balance_monitor  .............................................................................................................................................................................
 
 async function monitor_balance(){
   console.log(" ---------------- ");
   consoleLog("Starting Balance Monitor module....");
-
+  
+  tesSUCCESS = "true"
   var sequence = 0;
   var feeAmount = feeStartAmount;
-  if (reputationAccounts != [] ) {
+  if (reputationAccounts.length != 0 ) {
     var allAccounts = accounts.concat(reputationAccounts);
   } else {
-    logVerbose("no reputation accounts to check")
-    var allAccoounts = acounts;
+    consoleLog("no reputation accounts to check")
+    var allAccounts = accounts;
   }
+  consoleLog("checking XAH levels on all " + accounts.length + " accounts and " + reputationAccounts.length + " reputation accounts, with total amount of " + allAccounts.length + " to check...");
+  logVerbose(`allAccounts --> ${allAccounts}`);
+  console.log(" ------- ");
 
-  logVerbose("accounts = " + allAccounts.length);
   for (const account of allAccounts) {
 
     const { account_data } = await client.send({ command: "account_info", account: account });
-    var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
+    var sourceData = await client.send({ command: "account_info", account: sourceAccount });
     var sequence = sourceData.account_data.Sequence;
 
-    // auto fee calculations
-    let feeResponse = await client.send({ command: 'fee' });
-    if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
-    logVerbose("fee calculations, feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
-
-    if (account != xahSourceAccount) {
-      if (parseInt(account_data.Balance) < xah_balance_threshold) {
+    if (account != sourceAccount) {
+      if (parseInt(account_data.Balance) < (xah_balance_threshold * 1000000) ) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-        consoleLog(`XAH Balance for account ${account} is ${(account_data.Balance / 1000000)}, below threshold of ${xah_balance_threshold / 1000000} sending ${xah_refill_amount}XAH`);
+        consoleLog(`${YW}XAH Balance for account ${account} is ${(account_data.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
         consoleLog(`Source account XAH balance = ${(sourceData.account_data.Balance / 1000000)}`);
-        if (sourceData.account_data.Balance < xah_balance_threshold) {
-          consoleLog("Not enough XAH funds in source account to fill other accounts");
+        if ((sourceData.account_data.Balance / 1000000) < xah_refill_amount) {
+          consoleLog(`${RD}Not enough XAH funds in source account to fill other accounts${CL}`);
           if (!fs.existsSync(filePath)) {
-            await sendMail("Insufficient XAH funds", "We tried to send XAH to " + account + " but the source balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
+            await sendMail("Insufficient XAH funds", "We tried to send XAH to " + account + " but the source balance in " + sourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
             fs.writeFileSync(filePath, "Balance is too low");
           }
         }
         else {
-
-          const tx = {
+          let xahRefillTx = {
             TransactionType: 'Payment',
-            Account: xahSourceAccount, 
+            Account: sourceAccount, 
             Amount: (xah_refill_amount * 1000000).toString(),
             Destination: account_data.Account, 
             DestinationTag: evrDestinationAccountTag,
-            Fee: feeAmount, 
             NetworkID: network_id,
             Sequence: sequence
           }
-          const { signedTransaction } = lib.sign(tx, keypair)
-          const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-          consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee', xahRefillTx});
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+            xahRefillTx["Fee"] = feeAmount;
+            const { signedTransaction: xahRefillTxSigned } = lib.sign(xahRefillTx, keypair);
+            var { engine_result: xahRefillTxResult }  = await client.send({ command:'submit', 'tx_blob': xahRefillTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahRefillTxTx:${JSON.stringify(xahRefillTx)}`);
+          } else {
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, sourceAccount);
+            xahRefillTx = { ...xahRefillTx, ...networkInfo.txValues };
+            var { response: { engine_result: xahRefillTxResult } }  = await lib.signAndSubmit(xahRefillTx, xahaud, keypair);
+            logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahRefillTxTx:${JSON.stringify(xahRefillTx)}`);
+          }
+
+          if ( xahRefillTxResult !== "tesSUCCESS" && xahRefillTxResult !== "terQUEUED" ) {
+            tesSUCCESS = false;
+            consoleLog(`${RD}XAH Refill FAILED TO SEND, ${(xah_refill_amount)} XAH ${sourceAccount} > xx ${account_data.Account}, result: ${xahRefillTxResult}${CL}`);
+          } else {   
+          consoleLog(`${GN}XAH paymentSweep sent, ${(xah_refill_amount)} XAH, ${sourceAccount} --> ${account_data.Account}, result: ${xahRefillTxResult}${CL}`);
+          };
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
 
@@ -216,45 +251,45 @@ async function monitor_balance(){
 
         }
       } else {
-        consoleLog(`Balance for account ${account} is ${(account_data.Balance / 1000000)} above the threshold of ${(xah_balance_threshold / 1000000)}`);
+        consoleLog(`Balance for account ${account} is ${(account_data.Balance / 1000000)} above the threshold of ${(xah_balance_threshold)}`);
       }
     }
     console.log(" ------- ");
   }
-
+  
   if (reputationAccounts != [] ) {
+    console.log("")
+    consoleLog(" ######### ")
+    consoleLong("")
+    consoleLog("checking EVR levels on " + reputationAccounts.length + " reputation accounts...");
     for (const account of reputationAccounts) {
 
       const { account_data } = await client.send({ command: "account_info", account: account });
-
-      var sourceData = await client.send({ command: "account_info", account: xahSourceAccount });
-
+      var sourceData = await client.send({ command: "account_info", account: sourceAccount });
       var sequence = sourceData.account_data.Sequence;
 
-      if (account != xahSourceAccount) {
+      if (account != sourceAccount) {
         var balance = await GetEvrBalance(account);
-        var sourceBalance = await GetEvrBalance(xahSourceAccount);
-        
-        logVerbose(`EVR Balance for source account ${xahSourceAccount} is ${sourceBalance}`);
+        var sourceBalance = await GetEvrBalance(sourceAccount);
+        logVerbose(`EVR Balance for source account ${sourceAccount} is ${sourceBalance}`);
+
         if (parseInt(balance) < evr_balance_threshold) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-          
-          consoleLog(`EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR`);
+          consoleLog(`${YW}EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
           if (sourceBalance < evr_refill_amount) {
-            consoleLog("Not enough funds in source account " + xahSourceAccount + " to fill other accounts with EVR");
+            consoleLog(`${RD}Not enough funds in source account ${sourceAccount} to fill other accounts with EVR${CL}`);
             logVerbose("Source Account EVR Balance " + sourceBalance);
             logVerbose("evr_refill_amount =  " + evr_refill_amount);
             if (!fs.existsSync(filePath)) {
-              await sendMail("Insufficient EVR funds", "We tried to send EVR to " + account + " but the balance in " + xahSourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
+              await sendMail("Insufficient EVR funds", "We tried to send EVR to " + account + " but the balance in " + sourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
               fs.writeFileSync(filePath, "EVR Balance is too low");
             }
           }
           else {
-
-            const tx = { 
+            let evrRefillTx = { 
               TransactionType: 'Payment',
-              Account: xahSourceAccount,  //Destination account
+              Account: sourceAccount,  //Destination account
               Amount: {
                 "currency": "EVR",
                 "value": evr_refill_amount,
@@ -262,15 +297,31 @@ async function monitor_balance(){
               },
               Destination: account, //the account that has to be filled
               DestinationTag: evrDestinationAccountTag, 
-              Fee: feeAmount,
               NetworkID: network_id,
               Sequence: sequence
             }
+            // auto fee calculations and submit
+            feeResponse = await client.send({ command: 'fee', evrRefillTx});
+            if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+            if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+              evrRefillTx["Fee"] = feeAmount;
+              const { signedTransaction: evrRefillTxSigned } = lib.sign(evrRefillTx, keypair);
+              var { engine_result: evrRefillTxResult }  = await client.send({ command:'submit', 'tx_blob': evrRefillTxSigned });
+              logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} evrRefillTxTx:${JSON.stringify(evrRefillTx)}`);
+            } else {
+              if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+              networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, sourceAccount);
+              evrRefillTx = { ...evrRefillTx, ...networkInfo.txValues };
+              var { response: { engine_result: evrRefillTxResult } }  = await lib.signAndSubmit(evrRefillTx, xahaud, keypair);
+              logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} evrRefillTxTx:${JSON.stringify(evrRefillTx)}`);
+            }
 
-            const { signedTransaction } = lib.sign(tx, keypair)
-            //consoleLog("sending the EVR transaction " + JSON.stringify(tx));
-            const submit = await client.send({ command: 'submit', 'tx_blob': signedTransaction })
-            consoleLog(submit.engine_result, submit.engine_result_message, submit.tx_json.hash);
+            if ( evrRefillTxResult !== "tesSUCCESS" && evrRefillTxResult !== "terQUEUED" ) {
+              tesSUCCESS = false;
+              consoleLog(`${RD}EVR Refill FAILED TO SEND, ${evr_refill_amount} EVR ${sourceAccount} > xx ${account}, result: ${evrRefillTxResult}${CL}`);
+            } else {   
+            consoleLog(`${GN}EVR Refill sent, ${evr_refill_amount} EVR, ${sourceAccount} --> ${account}, result: ${evrRefillTxResult}${CL}`);
+            };
 
             if (fs.existsSync(filePath)) fs.rmSync(filePath);
 
@@ -285,6 +336,17 @@ async function monitor_balance(){
     }
   }
   console.log(" ------- ");
+  if (tesSUCCESS){
+    consoleLog(`${GN}all accounts succesfully checked${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 0
+  } else {
+    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 1
+  }
 }
 
 async function GetEvrBalance(account){
@@ -308,14 +370,15 @@ async function GetEvrBalance(account){
 }
 
 //.................................................................................................................................................................................................
-// Fund Sweeper  ..................................................................................................................................................................................
+// transfer_funds / fund Sweeper  .................................................................................................................................................................
 
 async function transfer_funds(){
   console.log(" ---------------- ");
   consoleLog("Starting the funds transfer module...");
-
+  var accountIndex = 1
   for (const account of accounts) {
-    logVerbose("start the transferring process on account " + account);
+    consoleLog("start the transferring process on account " + accountIndex + ", " + account);
+    accountIndex++;
     if (account != evrDestinationAccount) {
       var { account_data } = await client.send({ command: "account_info", account })
       var tesSUCCESS = true;
@@ -323,38 +386,49 @@ async function transfer_funds(){
       var feeAmount = feeStartAmount;
 
       while (true) {
-        // auto fee calculations
-        let feeResponse = await client.send({ command: 'fee' });
-        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString() };
-        logVerbose("account_data -- >" + JSON.stringify(account_data) + "\nfee calculations --> feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
 
         // sweep XAH
-        if ( process.env.xah_transfer == "true" && parseInt(account_data.Balance) > 4000000 ) {
-          const XAHtx = {
+        if ( process.env.xah_transfer == "true" && parseInt(account_data.Balance) > (xah_transfer_reserve * 1000000) ) {
+          let xahTx = {
             TransactionType: 'Payment',
             Account: account,
-            Amount: (account_data.Balance - 4000000).toString(),
+            Amount: (account_data.Balance - (xah_transfer_reserve * 1000000)).toString(),
             Destination: evrDestinationAccount,
-            Fee: feeAmount,
             NetworkID: network_id,
             Sequence: account_data.Sequence++
           };
-          const { signedTransaction: signedXAH } = lib.sign(XAHtx, keypair)
-          const XAHsubmit = await client.send({ command: 'submit', 'tx_blob': signedXAH });
-          if (XAHsubmit.engine_result !== "tesSUCCESS" ) {
-            tesSUCCESS = false;
-            consoleLog("XAH paymentSweep FAILED TO SEND, " + (account_data.Balance - 2000000) + "XAH " + account + " > xx " + evrDestinationAccount + ", result: " + XAHsubmit.engine_result);
-          } else {   
-          consoleLog("XAH paymentSweep sent, " + (account_data.Balance - 2000000) + "XAH " + account + " --> " + evrDestinationAccount + ", result: " + XAHsubmit.engine_result);
-          };
-        } else {
-          consoleLog("XAH Balance is " + account_data.Balance + " XAH, either you have XAH sweep turned off, or its below 4 XAH which is minumum required to sweep XAH funds, skipping account...");
-        }
 
-        
-        // fee check
-        feeResponse = await client.send({ command: 'fee' });
-        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee', xahTx});
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+            xahTx["Fee"] = feeAmount;
+            const { signedTransaction: xahTxSigned } = lib.sign(xahTx, keypair);
+            var { engine_result: xahResult }  = await client.send({ command:'submit', 'tx_blob': xahTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahTx:${JSON.stringify(xahTx)}`);
+          } else {
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+            xahTx = { ...xahTx, ...networkInfo.txValues };
+            var { response: { engine_result: xahResult } }  = await lib.signAndSubmit(xahTx, xahaud, keypair);
+            logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahTx:${JSON.stringify(xahTx)}`);
+          }
+
+          if ( xahResult !== "tesSUCCESS" && xahResult !== "terQUEUED" ) {
+            tesSUCCESS = false;
+            consoleLog(`${RD}XAH paymentSweep FAILED TO SEND, ${((account_data.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} > xx ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+          } else {   
+          consoleLog(`${GN}XAH paymentSweep sent, ${((account_data.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} --> ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+          };
+
+        } else {
+          if (process.env.xah_transfer) {
+            consoleLog(`${YW}XAH Balance is ${(account_data.Balance / 1000000 )} XAH, below the reserve of ${xah_transfer_reserve} XAH, set in .env file, skipping account...${CL}`);
+          } else {
+            consoleLog(`${YW}XAH Balance is ${account_data.Balance} XAH, XAH sweep is set to false, skipping account...${CL}`)
+          }
+
+        }
 
         // sweep EVR
         let marker = ''
@@ -375,10 +449,10 @@ async function transfer_funds(){
 
         // check if the EVR balance is enough to sweep
         if (balance <= minimum_evr_transfer) {
-          consoleLog("EVR Balance is " + balance + " EVR, below minumum required of " + minimum_evr_transfer + " to sweep EVR funds, skipping account...");
+          consoleLog(`${YW}EVR Balance is ${balance} EVR, below minumum required of ${minimum_evr_transfer} to sweep EVR funds, skipping account...${CL}`);
         } else {
           // sweep EVR to evrDestinationAccount
-          const EVRtx = {
+          let evrTx = {
             TransactionType: 'Payment',
             Account: account,
             Amount: {
@@ -388,17 +462,31 @@ async function transfer_funds(){
             },
             Destination: evrDestinationAccount,
             DestinationTag: evrDestinationAccountTag,
-            Fee: feeAmount,
             NetworkID: network_id,
             Sequence: account_data.Sequence++
           }
-          const { signedTransaction: signedEVR } = lib.sign(EVRtx, keypair)
-          const EVRsubmit = await client.send({ command: 'submit', 'tx_blob': signedEVR })
-          if (EVRsubmit.engine_result !== "tesSUCCESS" ) {
+
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee', evrTx});
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+            evrTx["Fee"] = feeAmount;
+            const { signedTransaction: evrTxSigned } = lib.sign(evrTx, keypair);
+            var { engine_result: evrResult }  = await client.send({ command:'submit', 'tx_blob': evrTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahTx:${JSON.stringify(evrTx)}`);
+          } else {
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+            evrTx = { ...evrTx, ...networkInfo.txValues };
+            var { response: { engine_result: evrResult } }  = await lib.signAndSubmit(evrTx, xahaud, keypair);
+            logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee} xahTx:${JSON.stringify(evrTx)}`);
+          }
+
+          if ( evrResult !== "tesSUCCESS" && evrResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog("EVR paymentSweep FAILED TO SEND, " + balance + "EVR " + account + " > xx " + evrDestinationAccount + ", result: " + EVRsubmit.engine_result);
+            consoleLog(`${RD}EVR paymentSweep FAILED TO SEND, ${balance} EVR ${account} > xx ${evrDestinationAccount}, result: ${evrResult}${CL}`);
           } else {   
-          consoleLog("EVR paymentSweep sent, " + balance + "EVR " + account + " --> " + evrDestinationAccount + ", result: " + EVRsubmit.engine_result);
+          consoleLog(`${GN}EVR paymentSweep sent, ${balance} EVR, ${account} --> ${evrDestinationAccount}, result: ${evrResult}${CL}`);
           };
         }
 
@@ -406,8 +494,8 @@ async function transfer_funds(){
           break 
         } else { 
           attempt++;
-          if ( attempt > 4 ) { process.exit() };
-          logVerbose("\nsomething failed, retying, " + attempt + " of 4");
+          if ( attempt > 2 ) { process.exit() };
+          logVerbose(`${RD}\nsomething failed, retying, ${attempt} of 2${CL}`);
         };
       }
 
@@ -417,10 +505,21 @@ async function transfer_funds(){
     consoleLog(" ---------------- ");
     consoleLog(" ");
   }
+  if (tesSUCCESS){
+    consoleLog(`${GN}all accounts succesfully checked${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 0
+  } else {
+    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 1
+  }
 }
 
 //.................................................................................................................................................................................................
-// Main heartbeat monitor  ........................................................................................................................................................................
+// monitor_heartbeat  .............................................................................................................................................................................
 
 async function monitor_heartbeat() {
   console.log(" ---------------- ");
@@ -436,7 +535,7 @@ async function monitor_heartbeat() {
   var accountIndex = 1;
   if (use_keypair_file) { var sliceAmount = 2 } else { var sliceAmount = 0 };
   for (const account of accounts.slice(sliceAmount)) {
-    consoleLog("checking account heartbeat on account " + account);
+    consoleLog("checking account heartbeat on account " + accountIndex + ", " + account);
     await checkAccountHeartBeat(account, accountIndex);
     accountIndex++;
     consoleLog(" ---------------- ");
@@ -566,77 +665,94 @@ async function sendMail(subject, text) {
 
 async function sendPush(account, accountIndex, pushStatus, pushMSG) {
   pushURL = push_addresses[accountIndex - 1];
-  if ( typeof pushURL === 'undefined' ) { consoleLog(`no push_address found (account Index ${accountIndex})`); return };
+  if ( typeof pushURL === 'undefined' ) { consoleLog(`${RD}no push_address found (account Index ${accountIndex})${CL}`); return };
   fetchURL = pushURL + "?status=" + pushStatus + "&msg=" + pushMSG;
   logVerbose("fetchURL ->" + fetchURL)
   try {
     const fetchResponse = await fetch(fetchURL);
     if (!fetchResponse.ok) {
-      consoleLog(`push notification NOT being recieved by robot :${RD}${fetchResponse.statusText}${CL}`);
+      consoleLog(`${RD}push notification NOT being recieved by robot :${fetchResponse.statusText}${CL}`);
     } else {
-    consoleLog(`push notification recieved by robot :${BL}${await fetchResponse.ok}${CL}`);
+    consoleLog(`push notification recieved by robot :${GN}${await fetchResponse.ok}${CL}`);
     }
   } catch (error) {
-    consoleLog('There was a problem with sending push notification to robot URL:', error);
+    consoleLog(`${RD}There was a problem with sending push notification to robot URL, error: ${error}${CL}`);
   }
 }
 
 //...............................................................................................................................................................................................
-// Initial wallet setup  ........................................................................................................................................................................
+// wallet_setup  ................................................................................................................................................................................
 
 //const wallet_setup = async () => {
 async function wallet_setup(){
   console.log(" ---------------- ");
   consoleLog("Starting initial wallet module...");
 
+  var feeAmount = feeStartAmount;
+  var feeResponse = {};
+  var networkInfo = {};
   var loop = 0;
-  for (const account of accounts) {
-    logVerbose("running initial wallet setup on account " + loop + "> " + account);
+
+  if (reputationAccounts.length != "0" ) {
+    var allAccounts = accounts.concat(reputationAccounts);
+    var allAccount_seeds = account_seeds.concat(reputationaccount_seeds);
+  } else {
+    logVerbose("no reputation accounts to found")
+    var allAccounts = accounts;
+    var allAccount_seeds = account_seeds;
+  }
+  consoleLog("checking " + allAccounts.length + " accounts...");
+  logVerbose(`allAccounts --> ${allAccounts}\n allAccount_seeds -->${allAccount_seeds}`);
+
+  for (const account of allAccounts) {
+    consoleLog("running initial wallet setup on account " + loop + " : " + account);
     
-    if (account != xahSourceAccount) {
+    if (account != sourceAccount) {
       var tesSUCCESS = true;
       var attempt = 1;
-      var feeAmount = feeStartAmount;
-
-      // get source account data
-      const { account_data: account_dataSource } = await client.send({ command: "account_info", account: xahSourceAccount });
-      logVerbose("xahSourceAccount >" + xahSourceAccount + "  account_data >" + JSON.stringify(account_dataSource));
 
       while (true) {
-        // auto fee calculations
-        let feeResponse = await client.send({ command: 'fee' });
-        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
-        logVerbose("fee calculations, feeStartAmount:" + feeStartAmount + " feeAmount:" + feeAmount + " feeResponse:" + JSON.stringify(feeResponse));
 
         // Send xahSetupamount XAH ( activating account )
         if (xahSetupamount != 0){
-          const xahTx = {
-            TransactionType: 'Payment',
-            Account: xahSourceAccount,
-            Amount: (xahSetupamount * 1000000).toString(), // Convert to drops
+          const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: sourceAccount });
+          let xahTx = {
+           TransactionType: 'Payment',
+            Account: sourceAccount,
+            Amount: (xahSetupamount * 1000000).toString(),
             Destination: account,
-            Fee: feeAmount,
             NetworkID: network_id,
-            Sequence: account_dataSource.Sequence++
+            Sequence: sequence
           };
-          const { signedTransaction: signedXrpTx } = lib.sign(xahTx, keypair);
-          const xahSubmit = await client.send({ command: 'submit', 'tx_blob': signedXrpTx });
-          if (xahSubmit.engine_result !== "tesSUCCESS" && xahSubmit.engine_result !== "terQUEUED" ) {
+
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee' });
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+            xahTx["Fee"] = feeAmount;
+            const { signedTransaction: xahTxSigned } = lib.sign(xahTx, keypair);
+            var { engine_result: xahResult }  = await client.send({ command:'submit', 'tx_blob': xahTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${Number(fee_max_amount)} fee_open_ledger_fee:${Number(feeResponse.drops.open_ledger_fee)} fee_base_fee:${feeResponse.drops.base_fee}`);
+          } else {
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, sourceAccount);
+            xahTx = { ...xahTx, ...networkInfo.txValues };
+            var { response: { engine_result: xahResult } }  = await lib.signAndSubmit(xahTx, xahaud, keypair);
+            logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+          }
+
+          if ( xahResult !== "tesSUCCESS" && xahResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(xahSetupamount + "XAH FAILED TO SEND, " + xahSourceAccount + " xxx " + account + ", result: " + xahSubmit.engine_result);
+            consoleLog(`${RD}${xahSetupamount}XAH FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${xahResult}${CL}`);
           } else {   
-          consoleLog(xahSetupamount + " XAH sent, " + xahSourceAccount + " --> " + account + ", result: " + xahSubmit.engine_result);
+          consoleLog(`${GN}${xahSetupamount} XAH sent, ${sourceAccount} --> ${account}, result: ${xahResult}${CL}`);
           };
         }
 
-        //get account data (now its been acivated)
-        const { account_data } = await client.send({ command: "account_info", account: account });
-        logVerbose("account >" + account + "  account_data >" + JSON.stringify(account_data));
-
         // Set trustline and send tokens
         if (evrSetupamount != 0){
-          // Set trustline
-          const trustlineTx = {
+          const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+          let trustlineTx = {
             TransactionType: 'TrustSet',
             Account: account,
             LimitAmount: {
@@ -644,18 +760,33 @@ async function wallet_setup(){
               value: '73000000',
               issuer: trustlineAddress
             },
-            Fee: feeAmount,
             NetworkID: network_id,
-            Sequence: account_data.Sequence++
+            Sequence: sequence
           };
-          trustlineKeypair = lib.derive.familySeed(accounts_seed[loop]);
-          const { signedTransaction: signedTrustline } = lib.sign(trustlineTx, trustlineKeypair);
-          const trustSubmit = await client.send({ command: 'submit', 'tx_blob': signedTrustline });
-          if ( trustSubmit.engine_result !== "tesSUCCESS" && trustSubmit.engine_result !== "terQUEUED" ) { 
-            tesSUCCESS = false;
-            consoleLog("EVR trustline FAILED TO SET on " + account + ", result: " + trustSubmit.engine_result);
+
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee' });
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+            trustlineTx["Fee"] = feeAmount;
+            trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            const { signedTransaction: trustlineTxSigned } = lib.sign(trustlineTx, trustlineKeypair);
+            var { engine_result: trustlineResult } = await client.send({ command: 'submit', 'tx_blob': trustlineTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
           } else {
-            consoleLog("EVR trustline set on " + account + ", result: " + trustSubmit.engine_result);
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+            trustlineTx = { ...trustlineTx, ...networkInfo.txValues };
+            trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            var { response: { engine_result: trustlineResult } } = await lib.signAndSubmit(trustlineTx, xahaud, trustlineKeypair);
+            logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+          }
+
+          if ( trustlineResult !== "tesSUCCESS" && trustlineResult !== "terQUEUED" ) { 
+            tesSUCCESS = false;
+            consoleLog(`${RD}EVR trustline FAILED TO SET on ${account}, result: ${trustlineResult}${CL}`);
+          } else {
+            consoleLog(`${GN}EVR trustline set on ${account}, result: ${trustlineResult}${CL}`);
           }
 
           //wait for trustline to be established
@@ -663,8 +794,7 @@ async function wallet_setup(){
             var truslineEstablished = false
             while (truslineEstablished == false) {
               const lines = await client.send({ command: 'account_lines', account })
-              //marker = lines?.marker === marker ? null : lines?.marker
-              logVerbose(`Got ${lines.lines.length} results`)
+              logVerbose(`found ${lines.lines.length} trustline on account, checking for issuer ${trustlineAddress}`)
               lines.lines.forEach(t => {
                 if (t.account == trustlineAddress) {
                   truslineEstablished = true
@@ -672,16 +802,11 @@ async function wallet_setup(){
               })
             }
 
-            // fee check
-            if ( trustSubmit.engine_result !== "terQUEUED" ){
-              feeResponse = await client.send({ command: 'fee' });
-              if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
-            }
-
             // Send EVR tokens
-            const tokenTx = {
+            const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: sourceAccount });
+            let tokenTx = {
               TransactionType: 'Payment',
-              Account: xahSourceAccount,
+              Account: sourceAccount,
               Amount: {
                 "currency": "EVR",
                 "value": evrSetupamount,
@@ -689,70 +814,106 @@ async function wallet_setup(){
               },
               Destination: account,
               DestinationTag: "",
-              Fee: feeAmount, 
               NetworkID: network_id,
-              Sequence: account_dataSource.Sequence++
+              Sequence: sequence
             };
-            const { signedTransaction: signedTokenTx } = lib.sign(tokenTx, keypair);
-            const evrSubmit = await client.send({ command: 'submit', 'tx_blob': signedTokenTx });
-            if ( evrSubmit.engine_result !== "tesSUCCESS" && evrSubmit.engine_result !== "terQUEUED") { 
-              tesSUCCESS = false;
-              consoleLog(evrSetupamount + " EVR FAILED TO SEND, " + xahSourceAccount + " xxx " + account + ", result: " + evrSubmit.engine_result);
+            // auto fee calculations and submit
+            feeResponse = await client.send({ command: 'fee' });
+            if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+            if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){            
+              tokenTx["Fee"] = feeAmount;
+              const { signedTransaction: tokenTxSigned } = lib.sign(tokenTx, keypair);
+              var { engine_result: tokenResult } = await client.send({ command: 'submit', 'tx_blob': tokenTxSigned });
+              logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
             } else {
-              consoleLog(evrSetupamount + " EVR sent, " + xahSourceAccount + " --> " + account + ", result: " + evrSubmit.engine_result);
+              if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+              networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, sourceAccount);
+              tokenTx = { ...tokenTx, ...networkInfo.txValues };
+              var { response: { engine_result: tokenResult } } = await lib.signAndSubmit(tokenTx, xahaud, keypair);
+              logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+            }
+
+            if ( tokenResult !== "tesSUCCESS" && tokenResult !== "terQUEUED") { 
+              tesSUCCESS = false;
+              consoleLog(`${RD}${evrSetupamount} EVR FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${tokenResult}${CL}`);
+            } else {
+              consoleLog(`${GN}${evrSetupamount} EVR sent, ${sourceAccount} --> ${account}, result: ${tokenResult}${CL}`);
             }
           }
         }
 
-        feeResponse = await client.send({ command: 'fee' });
-        if ( feeResponse.drops.open_ledger_fee > feeAmount && auto_adjust_fee == true ) { feeAmount = ( parseInt(feeResponse.drops.open_ledger_fee) + parseInt(fee_adjust_amount) ).toString()};
-
         // Set regularKey
         if (set_regular_key){
-          const regularTx = {
+          const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+          let regularTx = {
             TransactionType: 'SetRegularKey',
             Account: account,
-            Fee: feeAmount,
-            RegularKey: xahSourceAccount,
+            RegularKey: sourceAccount,
             NetworkID: network_id,
-            Sequence: account_data.Sequence++
+            Sequence: sequence
           };
-          regularKeypair = lib.derive.familySeed(accounts_seed[loop]);
-          const { signedTransaction: signedRegular } = lib.sign(regularTx, regularKeypair);
-          const regularSubmit = await client.send({ command: 'submit', 'tx_blob': signedRegular });
-          if ( regularSubmit.engine_result !== "tesSUCCESS" && regularSubmit.engine_result !== "terQUEUED" ) { 
-            tesSUCCESS = false;
-            consoleLog("regular key " + xahSourceAccount + " FAILED TO BE SET on " + account + ", result: " + regularSubmit.engine_result);
+          // auto fee calculations and submit
+          feeResponse = await client.send({ command: 'fee' });
+          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){            
+            regularTx["Fee"] = feeAmount;
+            regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            const { signedTransaction: regularTxSigned } = lib.sign(regularTx, regularKeypair);
+            var { engine_result: regularResult } = await client.send({ command: 'submit', 'tx_blob': regularTxSigned });
+            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
           } else {
-            consoleLog("regular key " + xahSourceAccount + " set on " + account + ", result: " + regularSubmit.engine_result);
+            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+            regularTx = { ...regularTx, ...networkInfo.txValues };
+            regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            var { response: { engine_result: regularResult } } = await lib.signAndSubmit(regularTx, xahaud, regularKeypair);
+            logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+          }
+
+          if ( regularResult !== "tesSUCCESS" && regularResult !== "terQUEUED" ) { 
+            tesSUCCESS = false;
+            consoleLog(`${RD}regular key ${sourceAccount} FAILED TO BE SET on ${account}, result: ${regularResult}${CL}`);
+          } else {
+            consoleLog(`${GN}regular key ${sourceAccount} set on ${account}, result: ${regularResult}${CL}`);
           }
         }
 
         if ( tesSUCCESS == true ) {
           break 
         } else {
-          if ( attempt > 2 ) { process.exit() };
-          logVerbose("something failed, retying, " + attempt + " of 2");
+          if ( attempt > 2 ) {
+            consoleLog(`${RD}something failed again, reached max retries, exiting...${CL}`);
+            process.exit()
+          };
+          consoleLog(`${RD}something failed, retying, ${attempt} of 2${CL}`);
           attempt++;
           tesSUCCESS = true;
-          
         };
       }
     } else {
-      consoleLog("skipping " + account + " as its the source account.");
+      consoleLog(`${YW}skipping ${account} as its the source account.${CL}`);
     };
     consoleLog(" ---------------- ");
     consoleLog(" ");
     loop++;
   };
-  consoleLog("wallet setup complete, setting up .env file.");
-  await updateEnv('run_wallet_setup', 'false');
-  await updateEnv('xahSourceAccount', accounts[0]);
-  await updateEnv('evrDestinationAccount', accounts[0]);
-  await updateEnv('reputationAccounts', accounts[1]);
-  await updateEnv('secret', accounts_seed[0]);
-  let saveAccounts = accounts.slice(2);
-  await updateEnv('accounts', saveAccounts.join('\n'));
+  if (tesSUCCESS){
+    await updateEnv('sourceAccount', accounts[0]);
+    await updateEnv('evrDestinationAccount', accounts[0]);
+    await updateEnv('secret', account_seeds[0]);
+    let saveAccounts = accounts.slice(1);
+    await updateEnv('accounts', saveAccounts.join('\n'));
+    if (reputationAccounts.length != "0" ) { await updateEnv('reputationAccounts', reputationAccounts.join('\n')) };
+    consoleLog(`${GN}all accounts succesfully checked and setup, and details exported to .env file${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 0
+  } else {
+    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more, NOT exporting details to .env file${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 1
+  };
 };
 
 // .env file handling  ........................................................................................................................................................................
@@ -785,6 +946,244 @@ async function updateEnv(key, value) {
   }
 }
 
+//...............................................................................................................................................................................................
+// monitor_claimreward  .........................................................................................................................................................................
+
+async function monitor_claimreward(){
+  console.log(" ---------------- ");
+  consoleLog("Starting the monitor claim rewards module...");
+
+  var liveDefinitions = await client.send({ "command": "server_definitions" });
+  var definitions = new lib.XrplDefinitions(liveDefinitions);
+  var total_reward_accumulated = 0;
+  var tesSUCCESS = true;
+
+  // onchain reward rate calculation
+  let rewardRate = await client.send({
+    command: 'ledger_entry',
+    hook_state: {
+      account: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
+      key: '0000000000000000000000000000000000000000000000000000000000005252', // RR
+      namespace_id: '0000000000000000000000000000000000000000000000000000000000000000'
+    }
+  })
+  let rewardDelay = await client.send({
+    command: 'ledger_entry',
+    hook_state: {
+      account: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
+      key: '0000000000000000000000000000000000000000000000000000000000005244', // RD
+      namespace_id: '0000000000000000000000000000000000000000000000000000000000000000'
+    }
+  })
+  rewardRate = await hookStateXLFtoBigNumber(rewardRate.node['HookStateData']);
+  rewardDelay = await hookStateXLFtoBigNumber(rewardDelay.node['HookStateData']);
+  rewardRateHuman = await calcrewardRateHuman(rewardRate);
+  rewardDelayHuman = await calcrewardDelayHuman(rewardDelay);
+
+  consoleLog(`${YW}Current Ledger rewardrate --->${rewardRateHuman}  rewardDelay --->${rewardDelayHuman}${CL}`);
+  consoleLog(" ---------------- ");
+  consoleLog(" ");
+
+  for (const account of accounts) {
+    consoleLog("starting check on account " + account);
+
+    var { account_data } = await client.send({ command: "account_info", account })
+    var { ledger } = await client.send({ command: 'ledger', ledger_index: 'validated' })
+
+    logVerbose("\naccount_data -- >" + JSON.stringify(account_data) + "\n\nledger -->" + JSON.stringify(ledger) + "\n");
+
+    const RewardLgrFirst = account_data?.RewardLgrFirst || 0;
+    const RewardLgrLast = account_data?.RewardLgrLast || 0;
+    const RewardTime = account_data?.RewardTime || 0;
+    const RewardAccumulator = account_data?.RewardAccumulator ? parseFloat(BigInt('0x' + account_data?.RewardAccumulator).toString()) : 0;
+    const remaining_sec = rewardDelay - (ledger.close_time - RewardTime);
+    const uninitialized = account_data?.RewardLgrFirst === undefined;
+    const claimable = remaining_sec <= 0;
+    const now = new Date();
+    const claimableDate = new Date(now.getTime() + remaining_sec * 1000);
+    const claimableTime = await calcrewardDelayHuman(remaining_sec);
+
+    // calculate account reward
+    const cur = Number(ledger.ledger_index);
+    const elapsed = cur - RewardLgrFirst;
+    const elapsed_since_last = cur - RewardLgrLast;
+    let accumulator = RewardAccumulator;
+    if (account_data && parseFloat(account_data.Balance) > 0 && elapsed_since_last > 0) {
+      accumulator += parseFloat(account_data.Balance) / 1000000 * elapsed_since_last;
+    }
+    const reward = accumulator / elapsed * rewardRate;
+
+    logVerbose(`RewardLgrFirst.${RewardLgrFirst}  RewardLgrLast.${RewardLgrLast}  RewardTime.${RewardTime}  RewardAccumulator.${RewardAccumulator}  rewardRate.${rewardRate} rewardDelay.${rewardDelay} remaining_sec.${remaining_sec}  claimableTime.${claimableTime}  uninitialized.${uninitialized}  claimable.${claimable}  claimableDate.${claimableDate}  reward.${reward}`)
+    
+    if (uninitialized) {
+      consoleLog(`${YW}account found to be Uninitialized, registering for claim rewards now...${CL}`);
+
+      const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+      const claimTx = {
+        Account: account,
+        TransactionType: 'ClaimReward',
+        Issuer: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
+        NetworkID: network_id,
+        Sequence: sequence,
+        Fee: "0",
+        SigningPubKey: "",
+      };
+
+      // auto fee calculations and submit
+      const encode = await lib.binary.encode(claimTx, definitions);
+      feeResponse = await client.send({ command: 'fee', tx_blob: encode });
+
+      if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+      if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+        claimTx["Fee"] = feeAmount;
+        const { signedTransaction: claimTxSigned } = lib.sign(claimTx, keypair, definitions);
+        var { engine_result: claimTxResult } = await client.send({ command: 'submit', 'tx_blob': claimTxSigned });
+        logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+      } else {
+        if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+        networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+        claimTx = { ...regularTx, ...networkInfo.txValues };
+        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(regularTx, xahaud, keypair);
+        logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee}`);
+      }
+
+      if ( claimTxResult !== "tesSUCCESS" && claimTxResult !== "terQUEUED") { 
+        tesSUCCESS = false;
+        consoleLog(`${RD}Registration failed, result: ${claimTxResult}${CL}`);
+      } else {
+        consoleLog(`${GN}Registration sucessfully initialized for ${account}${CL}`);
+      }
+      consoleLog(" ---------------- ");
+      consoleLog(" ");
+      continue
+    }
+
+    if (claimable) {
+      consoleLog(`${GN}account is within a claimable timeframe, rewards will be ${reward}, now attempting a claim...${CL}`);
+
+      const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+      const claimTx = {
+        Account: account,
+        TransactionType: 'ClaimReward',
+        Issuer: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
+        NetworkID: network_id,
+        Sequence: sequence,
+        Fee: "0",
+        SigningPubKey: "",
+      };
+      const encode = await lib.binary.encode(claimTx, definitions);
+      feeResponse = await client.send({ command: 'fee', tx_blob: encode });
+
+      // auto fee calculations and submit
+      if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+      if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+        claimTx["Fee"] = feeAmount;
+        const { signedTransaction: claimTxSigned } = lib.sign(claimTx, keypair, definitions);
+        var { engine_result: claimTxResult } = await client.send({ command: 'submit', 'tx_blob': claimTxSigned });
+        logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+      } else {
+        if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+        networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+        claimTx = { ...regularTx, ...networkInfo.txValues };
+        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(regularTx, xahaud, keypair);
+        logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+      }
+
+
+      if ( claimTxResult !== "tesSUCCESS" && claimTxResult !== "terQUEUED") {
+        tesSUCCESS = false;
+        consoleLog(`${RD}claim failed for ${account}, result: ${claimTxResult}${CL}`);
+      } else {
+        consoleLog(`${GN}claim success, re-claimed ${reward}${CL}`);
+        total_reward_accumulated += reward;
+      }
+    } else {
+      consoleLog(`${YW}account is not within a claimable timeframe, next claimable date is in ${claimableTime}${CL}, accumulated rewards so far ${reward}`)
+    }
+
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+  };
+  if (tesSUCCESS){
+    consoleLog(`${GN}all accounts succesfully checked, total accumulated rewards are ${total_reward_accumulated}${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 0
+  } else {
+    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more, total accumulated rewards this cycle ${total_reward_accumulated}${CL}`)
+    consoleLog(" ---------------- ");
+    consoleLog(" ");
+    return 1
+  };
+};
+
+// support funcitions
+
+function get_exponent(xfl) {
+  if (xfl < 0n)
+    throw new Error("Invalid XFL");
+  if (xfl == 0n)
+    return 0n;
+  return ((xfl >> 54n) & 0xFFn) - 97n;
+};
+
+function get_mantissa(xfl) {
+  if (xfl < 0n)
+    throw new Error("Invalid XFL");
+  if (xfl == 0n)
+    return 0n;
+  return xfl - ((xfl >> 54n) << 54n);
+};
+
+function is_negative(xfl) {
+  if (xfl < 0n)
+    throw new Error("Invalid XFL");
+  if (xfl == 0n)
+    return false;
+  return ((xfl >> 62n) & 1n) == 0n;
+};
+
+function to_string(xfl) {
+  if (xfl < 0n)
+    throw new Error("Invalid XFL");
+  if (xfl == 0n)
+    return "<zero>";
+  return (is_negative(xfl) ? "-" : "+") +
+    get_mantissa(xfl).toString() + "E" + get_exponent(xfl).toString();
+};
+
+function xflToFloat(xfl) {
+  return parseFloat(to_string(xfl));
+};
+
+function changeEndianness(str){
+  const result = [];
+  let len = str.length - 2;
+  while (len >= 0) {
+    result.push(str.substr(len, 2));
+    len -= 2;
+  }
+  return result.join('');
+};
+
+function hookStateXLFtoBigNumber(stateData) {
+  const data = changeEndianness(stateData);
+  const bi = BigInt('0x' + data);
+  return xflToFloat(bi);
+};
+
+function calcrewardRateHuman(rewardRate) {
+  if (!rewardRate) return "0 %";
+  if (rewardRate < 0 || rewardRate > 1) return "Invalid rate";
+  return (Math.round((((1 + rewardRate) ** 12) - 1) * 10000) / 100) + " %";
+};
+
+function calcrewardDelayHuman(rewardDelay) {
+  if (rewardDelay / 3600 < 1) return Math.ceil(rewardDelay / 60) + " mins";
+  if (rewardDelay / (3600 * 24) < 1) return Math.ceil(rewardDelay / 3600) + " hours";
+  return Math.ceil(rewardDelay / (3600 * 24)) + ' days';
+};
+
 //........................................................................................................................................................................................
 // start sections ........................................................................................................................................................................
 
@@ -803,9 +1202,10 @@ async function validate() {
 
 const main = async () => {
   if (run_wallet_setup) { use_keypair_file = true };
+  
   const valid = await validate();
   if (valid) {
-    if (run_wallet_setup) { await wallet_setup() };
+    if (run_monitor_claimreward) { await monitor_claimreward() };
     if (run_transfer_funds) { await transfer_funds() };
     if (run_monitor_balance) { await monitor_balance() };
     if (run_monitor_heartbeat) { await monitor_heartbeat() };
@@ -816,7 +1216,6 @@ const main = async () => {
 async function start(){
   await networkSetup();
   if (command) {
-    if ( command == "wallet_setup" ) { use_keypair_file = true };
     const valid = await validate();
     if (valid) {
       switch (command) {
@@ -832,6 +1231,9 @@ async function start(){
         case 'monitor_heartbeat':
               await monitor_heartbeat();
               break;
+        case 'monitor_claimreward':
+              await monitor_claimreward();
+              break;
         default:
             console.log(`Unknown command: ${command}`);
             console.log('Usage: node evernode_monitor.js <command>');
@@ -840,6 +1242,7 @@ async function start(){
             console.log('  transfer_funds  - sweep funds (EVR/XAH) to chosen account');
             console.log('  monitor_balance  - Check balance (EVR/XAH), and top up if needed');
             console.log('  monitor_heartbeat  - Check for recent heartbeat, and email failures');
+            console.log('  monitor_claimreward  - Check the balance adjustment hook, and claim rewards');
             break;
       };
     ;}
@@ -851,8 +1254,10 @@ async function start(){
   // Workaround so all queued emails are sent. 
   // I had to explicitly call the exit() function as the application was not stopping 
   // in case of Xahaud request failure, I don't know why. 
-  setTimeout(function () {
+  if (email_notification) { 
+    setTimeout(function () {
     exit();
-  }, 10000);
+    }, 10000);
+  }
 };
 start();
