@@ -257,15 +257,16 @@ do you want re-generate new .env file?
   fi
   if [ "$use_testnet" == "true" ]; then DEPLOYMENT_NETWORK="testnet"; else DEPLOYMENT_NETWORK="mainnet"; fi
 
-  # check for key_pair.txt file and report
-  if { [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ]; } || { [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null || echo 0) -lt 3 ]; }; then
+  # check key_pair files and .env for accounts etc and report
+  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null) -lt 2 ] ); then 
     touch $keypair_file
     while true; do
-      if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --inputbox "incorrect amount of key pairs in $keypair_file file,
-key pairs found in file :$(grep -c '^Address' "$keypair_file" 2>&1)
+      if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --inputbox "the \"use_keypair_file\" is set to true,
+with incorrect amount of key pairs in $keypair_file file
+key pairs found in file :$(grep -c '^Address' "$keypair_file" 2>&1),
 
-enter amount of testnet accounts to create. (minimum is 3) 
-or 0 to skip (giving you access to manager)" 12 64 "3" --title "evernode count" 3>&1 1>&2 2>&3); then
+enter amount of testnet accounts to create. (minimum is 2) 
+or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 3>&1 1>&2 2>&3); then
         if ! [[ $NUM_VMS =~ $INTEGER ]]; then
           whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --msgbox "needs to be a number" 8 58
         elif [[ $NUM_VMS == 0 ]]; then
@@ -298,7 +299,7 @@ or 0 to skip (giving you access to manager)" 12 64 "3" --title "evernode count" 
 one good method is using a vanity generator like this https://github.com/nhartner/xrp-vanity-address"
     exit
   elif [ "$use_keypair_file" == "true" ] && [ $(grep -c '^Address' "$keypair_file" 2>&1) -lt 3 ]; then
-    msg_error "not enough key pairs in $keypair_file file, minimum is 3 (source, reputation, and one for a evernode account)"
+    msg_error "use_keypair_file is set to true, but there is not enough key pairs in $keypair_file file, minimum is 2 (source, and one for a evernode account)"
     exit
   fi
 
