@@ -258,7 +258,7 @@ do you want re-generate new .env file?
   if [ "$use_testnet" == "true" ]; then DEPLOYMENT_NETWORK="testnet"; else DEPLOYMENT_NETWORK="mainnet"; fi
 
   # check key_pair files and .env for accounts etc and report
-  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null) -lt 2 ] ); then 
+  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null || 0 ) -lt 2 ] ); then 
     touch $keypair_file
     while true; do
       if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --inputbox "the \"use_keypair_file\" is set to true,
@@ -480,11 +480,11 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
-          source_account=$sourceAccount
+          source_account="$sourceAccount"
           total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
           if [ -f "$keypair_rep_file" ]; then
-            total_rep_accounts=$(( $(grep -c '^Address' "$keypair_rep_file") ))
-            total_accounts=${{ total_accounts + total_rep_accounts }}
+            total_rep_accounts=$(grep -c '^Address' "$keypair_rep_file" || 0 )
+            total_accounts=$(( total_accounts + total_rep_accounts ))
           fi
         else
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
