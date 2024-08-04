@@ -141,7 +141,7 @@ its very simple and before it runs any module gives you a overview, and settings
 
 you run it with this one simple command .. 
 
-    bash -c "$(wget -qLO - https://raw.githubusercontent.com/gadget78/evernode-deploy-monitor/deploy.sh)"
+    bash -c "$(wget -qLO - https://raw.githubusercontent.com/gadget78/evernode-deploy-monitor/main/deploy.sh)"
 
 which works under most linux enviroments, INCLUDING proxmox, and depending where you run it, will depend on what menu system you get...
 
