@@ -337,6 +337,11 @@ one good method is using a vanity generator like this https://github.com/nhartne
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
+        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
+        if [[ -r "$keypair_rep_file" ]]; then
+          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
+          total_accounts=$(( total_accounts + total_rep_accounts ))
+        fi
 
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -374,17 +379,18 @@ one good method is using a vanity generator like this https://github.com/nhartne
           evr_balance="\Zb\Z1failed to connect\Zn"
         fi
 
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "Wallet Setup Module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
-    This module is used to prepare key-pairs in file \"$keypair_file\"
-    It uses the first key pair in file for the source of XAH/EVR.
+    This module is used to prepare key-pairs both files
+    \"$keypair_file\" and \"$keypair_rep_file\" files.
+    It uses the first key-pair in \"$keypair_file\" for the source of XAH/EVR.
     Key pairs are prepared by:
     - Sending XAH to activate account,
     - Setting the EVR trustline, and sending EVR,
     - Setting regular key (using source account).
-    It will then setup the .env so key_pair.txt file is not needed for other operations.
+    It will then setup the .env so key_pair files are not needed for other operations.
     This will leave all accounts ready to be used for Evernode deployment.
 
 \Z0\ZbSettings:\Zn
@@ -395,15 +401,16 @@ one good method is using a vanity generator like this https://github.com/nhartne
     set_regular_key = \"$set_regular_key\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
+    fee_max_amount = \"$fee_max_amount\"
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total accounts to be activated = \"$(( $(grep -c '^Address' "$keypair_file") - 1 ))\"
+    total accounts to be activated = \"$total_accounts\"
     source account = \"$source_account\"
     total XAH needed = \"$xahSetupamount_calculated\" | amount in source account = \"$xah_balance\"
     total EVR needed = \"$evrSetupamount_calculated\" | amount in source account = \"$evr_balance\"
 
-Do you want to use the above settings to setup accounts?" 32 100; then
+Do you want to use the above settings to setup all $total_accounts accounts?" 32 100; then
           clear
           node evernode_monitor.js wallet_setup && echo "sucessfull pass"
           echo ""
@@ -419,11 +426,15 @@ Do you want to use the above settings to setup accounts?" 32 100; then
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
-          source_account="$sourceAccount"
-          total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
-        else
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-          total_accounts=$(echo "$accounts" | wc -l)
+        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
+        if [[ -r "$keypair_rep_file" ]]; then
+          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
+          total_accounts=$(( total_accounts + total_rep_accounts ))
+        fi
+        else
+          source_account="$sourceAccount"
+          total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -441,13 +452,13 @@ Do you want to use the above settings to setup accounts?" 32 100; then
           xah_balance="\Zb\Z1failed to connect\Zn"
           evr_balance="\Zb\Z1failed to connect\Zn"
         fi
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "transfer_funds module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
     This module is used to sweep EVR and XAH from all accounts to the source account 
     it does this by utilising the regular key secret.
-    so will need to be set on all accounts (can be done with wallet setup module)
+    so this needs to be set on all accounts (can be done with wallet setup module)
 
 \Z0\ZbSettings:\Zn
     use_testnet = \"$use_testnet\"
@@ -480,15 +491,15 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
-          source_account="$sourceAccount"
-          total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
-          if [ -f "$keypair_rep_file" ]; then
-            total_rep_accounts=$(grep -c '^Address' "$keypair_rep_file" || 0 )
-            total_accounts=$(( total_accounts + total_rep_accounts ))
-          fi
-        else
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-          total_accounts=$(echo "$accounts$reputationAccounts" | wc -l)
+        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
+        if [[ -r "$keypair_rep_file" ]]; then
+          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
+          total_accounts=$(( total_accounts + total_rep_accounts ))
+        fi
+        else
+          source_account="$sourceAccount"
+          total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -507,7 +518,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
           evr_balance="\Zb\Z1failed to connect\Zn"
         fi
 
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "monitor_balance module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
@@ -520,7 +531,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
     xahau server = \"$xahaud_server\"
     XAH transfer sweep = \"$xah_transfer\"
     xah_balance_threshold to trigger topup = \"$xah_balance_threshold\"
-    evr_balance_threshold to triiget topup = \"$evr_balance_threshold\"
+    evr_balance_threshold to trigger topup = \"$evr_balance_threshold\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
 
@@ -547,10 +558,10 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
-          source_account=$sourceAccount
+          source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
           total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
         else
-          source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
+          source_account="$sourceAccount"
           total_accounts=$(echo "$accounts" | wc -l)
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
@@ -583,7 +594,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
 
         IFS=$'\n' read -r -d '' -a push_addresses <<< "$push_addresses" || true
 
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "monitor_heartbeats module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
@@ -622,11 +633,15 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
-          source_account=$sourceAccount
-          total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
-        else
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-          total_accounts=$(echo "$accounts" | wc -l)
+        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
+        if [[ -r "$keypair_rep_file" ]]; then
+          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
+          total_accounts=$(( total_accounts + total_rep_accounts ))
+        fi
+        else
+          source_account="$sourceAccount"
+          total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -639,7 +654,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
           xah_balance="\Zb\Z1failed to connect\Zn"
         fi
 
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "monitor_claimrewards module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
@@ -695,7 +710,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
           evr_balance="\Zb\Z1failed to connect\Zn"
         fi
 
-        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+        if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "install monitor as cronjob" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
@@ -748,7 +763,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
       ######### uptime kuma
       elif [ "$WALLET_TASK" == "7" ]; then
         while true; do
-          if UPTIMEKUMA_TASK=$(dialog --cancel-label "Exit" --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+          if UPTIMEKUMA_TASK=$(dialog --cancel-label "Exit" --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
             --title "uptime kuma" \
             --menu "What operation to perform?" 15 78 6 \
             "1" "install uptime kuma" \
@@ -914,7 +929,7 @@ EOF
       ######### help area
       elif [ "$WALLET_TASK" == "h" ]; then
         while true; do
-          if HELP_PAGES=$(dialog --cancel-label "Exit" --backtitle "Proxmox VE Helper Scripts: Wallet Management $ver" \
+          if HELP_PAGES=$(dialog --cancel-label "Exit" --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
             --title "help pages" \
             --menu "Which help page to you want to view?" 15 78 6 \
             "1" "main wallet managerment help file" \
