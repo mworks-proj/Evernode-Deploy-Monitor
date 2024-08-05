@@ -128,7 +128,7 @@ async function getAccounts() {
       const accountsdata = await fs.promises.readFile(keypair_file, 'utf8');
       accounts = await accountsdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       account_seeds = await accountsdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
-      } catch (err) {
+    } catch (err) {
       console.error(`Error reading ${key_pair} file:`);
       logVerbose("error returned ->" + err)
     }
@@ -137,19 +137,25 @@ async function getAccounts() {
       const repdata = await fs.promises.readFile(keypair_rep_file, 'utf8');
       reputationAccounts = await repdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       reputationaccount_seeds = await repdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
-      } catch (err) {
+    } catch (err) {
       console.error(`Error reading ${keypair_rep_file} file:`);
       logVerbose("error returned ->" + err)
     }
-      consoleLog("number of accounts found = " + accounts.length);
-      consoleLog("number of reputationAccounts found = " + reputationAccounts.length);
-      logVerbose(`account strings -->${accounts},\n and reputation accounts -->${reputationAccounts}`);
-      logVerbose(`seed strings -->${account_seeds},\n and reputation seeds -->${reputationaccount_seeds}`);
-      sourceAccount = accounts[0];
-      evrDestinationAccount = accounts[0];
-      evrDestinationAccountTag = "";
+    consoleLog("number of accounts found = " + accounts.length);
+    consoleLog("number of reputationAccounts found = " + reputationAccounts.length);
+    logVerbose(`account strings -->${accounts},\n and reputation accounts -->${reputationAccounts}`);
+    logVerbose(`seed strings -->${account_seeds},\n and reputation seeds -->${reputationaccount_seeds}`);
+    sourceAccount = accounts[0];
+    evrDestinationAccount = accounts[0];
+    evrDestinationAccountTag = "";
+    try {
       var secret = account_seeds[0];
       keypair = lib.derive.familySeed(secret);
+    } catch (err) {
+      console.error(`Error reading secret from source account`);
+      logVerbose("error returned ->" + err)
+    }
+
   } else {
     consoleLog("using .env file for source Account, accounts, reputation accounts, and regular key for their access.");
     sourceAccount = process.env.sourceAccount;
@@ -259,9 +265,10 @@ async function monitor_balance(){
   
   if (reputationAccounts != [] ) {
     console.log("")
-    consoleLog(" ######### ")
-    consoleLog("")
+    console.log(" ######### ")
+    console.log("")
     consoleLog("checking EVR levels on " + reputationAccounts.length + " reputation accounts...");
+    consoleLog(" ------- ");
     for (const account of reputationAccounts) {
 
       const { account_data } = await client.send({ command: "account_info", account: account });
@@ -331,11 +338,12 @@ async function monitor_balance(){
         } else {
           consoleLog(`EVR balance for ${account} is ${balance} above the threshold of ${evr_refill_amount}`);
         }
-
+        
       }
+      consoleLog(" ------- ");
     }
+
   }
-  console.log(" ------- ");
   if (tesSUCCESS){
     consoleLog(`${GN}all accounts succesfully checked${CL}`)
     consoleLog(" ---------------- ");
@@ -697,7 +705,7 @@ async function wallet_setup(){
     var allAccounts = accounts.concat(reputationAccounts);
     var allAccount_seeds = account_seeds.concat(reputationaccount_seeds);
   } else {
-    logVerbose("no reputation accounts to found")
+    logVerbose("no reputation accounts found")
     var allAccounts = accounts;
     var allAccount_seeds = account_seeds;
   }
@@ -769,7 +777,12 @@ async function wallet_setup(){
           if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
           if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
             trustlineTx["Fee"] = feeAmount;
-            trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            try {
+              trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            } catch (err) {
+              console.error(`Error reading secret for account ${loop} : ${account}`);
+              logVerbose("error returned ->" + err)
+            }
             const { signedTransaction: trustlineTxSigned } = lib.sign(trustlineTx, trustlineKeypair);
             var { engine_result: trustlineResult } = await client.send({ command: 'submit', 'tx_blob': trustlineTxSigned });
             logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
@@ -777,7 +790,12 @@ async function wallet_setup(){
             if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
             networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
             trustlineTx = { ...trustlineTx, ...networkInfo.txValues };
-            trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            try {
+              trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            } catch (err) {
+              console.error(`Error reading secret for account ${loop} : ${account}`);
+              logVerbose("error returned ->" + err)
+            }
             var { response: { engine_result: trustlineResult } } = await lib.signAndSubmit(trustlineTx, xahaud, trustlineKeypair);
             logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
           }
@@ -857,7 +875,12 @@ async function wallet_setup(){
           if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
           if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){            
             regularTx["Fee"] = feeAmount;
-            regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            try {
+              regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            } catch (err) {
+              console.error(`Error reading secret for account ${loop} : ${account}`);
+              logVerbose("error returned ->" + err)
+            }
             const { signedTransaction: regularTxSigned } = lib.sign(regularTx, regularKeypair);
             var { engine_result: regularResult } = await client.send({ command: 'submit', 'tx_blob': regularTxSigned });
             logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
@@ -865,7 +888,12 @@ async function wallet_setup(){
             if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
             networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
             regularTx = { ...regularTx, ...networkInfo.txValues };
-            regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            try {
+              regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+            } catch (err) {
+              console.error(`Error reading secret for account ${loop} : ${account}`);
+              logVerbose("error returned ->" + err)
+            }
             var { response: { engine_result: regularResult } } = await lib.signAndSubmit(regularTx, xahaud, regularKeypair);
             logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
           }

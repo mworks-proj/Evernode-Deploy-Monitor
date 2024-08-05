@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1
+ver=1.1
 
 ###################################################################################
 # message functions for script
@@ -71,7 +71,7 @@ function error_handler() {
   if mount | grep -q '/mnt/evernode-mount'; then
     guestunmount /mnt/evernode-mount/
   fi
-  msg_error "error occured, clearing half built stuff, TMP files, then cleanly exiting"
+  msg_error "an error occured, see above, cleared temp directoy ($TEMP_DIR), and cleanly exited..."
 }
 
 function cleanup() {
@@ -247,7 +247,7 @@ function wallet_management_script() {
   msg_ok "pre-checks complete."
 
   if [ -z "${monitor_ver:-}" ] || [ "${monitor_ver:-0}" -lt 2 ]; then
-    if (whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --title ".env missmatch" --yesno ".env version missmatch, you may encounter errors,
+    if (whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --title ".env missmatch" --yesno ".env version missmatch, you may encounter errors,
 do you want re-generate new .env file?
 (old .env will be backed up to .old.env)" 10 58); then
       mv .env .old.env
@@ -258,17 +258,18 @@ do you want re-generate new .env file?
   if [ "$use_testnet" == "true" ]; then DEPLOYMENT_NETWORK="testnet"; else DEPLOYMENT_NETWORK="mainnet"; fi
 
   # check key_pair files and .env for accounts etc and report
-  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null || 0 ) -lt 2 ] ); then 
+  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null || echo "0" ) -lt 2 ] ); then 
     touch $keypair_file
+
     while true; do
-      if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --inputbox "the \"use_keypair_file\" is set to true,
+      if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --inputbox "the \"use_keypair_file\" is set to true,
 with incorrect amount of key pairs in $keypair_file file
 key pairs found in file :$(grep -c '^Address' "$keypair_file" 2>&1),
 
 enter amount of testnet accounts to create. (minimum is 2) 
 or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 3>&1 1>&2 2>&3); then
         if ! [[ $NUM_VMS =~ $INTEGER ]]; then
-          whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --msgbox "needs to be a number" 8 58
+          whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "needs to be a number" 8 58
         elif [[ $NUM_VMS == 0 ]]; then
           break
         elif [ $NUM_VMS -gt 2 ]; then
@@ -294,6 +295,24 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
         exit-script
       fi
     done
+
+  elif ! [[ $(wc -l < "$keypair_file") -eq $(grep -c '^Address' "$keypair_file") ]]; then
+      if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
+                --defaultno --colors --title "problem detected" \
+                --yesno "not every line in $keypair_file\nseems to start with \"Address:\"?\n\n\Zb\Z1this WILL cause issues, and needs to be fixed.\Zn\n\ncontinue to use Wallet Manager anyhows?" 12 58 ; then
+        break
+      else
+        exit
+      fi
+  elif ! [[ $(wc -l < "$keypair_rep_file") -eq $(grep -c '^Address' "$keypair_rep_file") ]]; then
+      if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
+                --defaultno --title "problem detected" \
+                --yesno "not every line in $keypair_rep_file seems to start with \"Address:\"?\n\n\Zb\Z1this WILL cause issues, and needs to be fixed.\Zn\n\ncontinue to use Wallet Manager anyhows?" 12 58 \
+                --colors; then
+        break
+      else
+        exit
+      fi
   elif [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ]; then
     msg_error "no $keypair_file file, you need to create one for mainnet use,
 one good method is using a vanity generator like this https://github.com/nhartner/xrp-vanity-address"
@@ -1047,12 +1066,12 @@ function evernode_deploy_script() {
     ENTRY_STRING=$(curl -s $gadget_encrypt | base64 | tr '+/' '-_' | tr -d '=' )
     DEPLOY_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://deploy.zerp.network/$ENTRY_STRING.sh)
     if [ "$DEPLOY_STATUS" == "403" ]; then
-      whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --msgbox "you dont have access to the evernode deploy script,
+      whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "you dont have access to the evernode deploy script,
 contact @gadget78 for access.
 giving him this code $ENTRY_STRING" 10 58
       exit
     elif [ "$DEPLOY_STATUS" == "404" ]; then
-      whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --msgbox "deploy script not present ?
+      whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "deploy script not present ?
 contact @gadget78 with your code $ENTRY_STRING
 or just try again in 15 mins" 10 58
       exit
@@ -1060,7 +1079,7 @@ or just try again in 15 mins" 10 58
       bash -c "$(wget -qLO - https://deploy.zerp.network/$ENTRY_STRING.sh)"
     fi
   else
-    whiptail --backtitle "Proxmox VE Helper Scripts: evernode deploy script $ver" --msgbox "unable to connect to deploy server?
+    whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "unable to connect to deploy server?
 contact @gadget78" 8 58
     exit
   fi
@@ -1072,7 +1091,7 @@ contact @gadget78" 8 58
 
 function start_() {
   if command -v pveversion >/dev/null 2>&1; then
-    if MODULE=$(whiptail --backtitle "Proxmox VE Helper Scripts: Evernode Deploy Script $ver" \
+    if MODULE=$(whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
                   --title "ProxMox detected..." \
                   --menu "Which module do you want to start?" 12 42 4 \
                   "1" "Wallet Management" \
@@ -1094,7 +1113,7 @@ function start_() {
   fi
 
   if ! command -v pveversion >/dev/null 2>&1; then
-    if MODULE2=$(whiptail --backtitle "Proxmox VE Helper Scripts: Evernode Deploy Script $ver" \
+    if MODULE2=$(whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
                   --title "ProxMox NOT detected..." \
                   --menu "Which module do you want to start?" 10 42 3 \
                   "1" "Wallet Management" \
