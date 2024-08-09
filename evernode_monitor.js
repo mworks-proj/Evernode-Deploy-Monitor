@@ -1057,7 +1057,7 @@ async function monitor_claimreward(){
       consoleLog(`${YW}account found to be Uninitialized, registering for claim rewards now...${CL}`);
 
       const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
-      const claimTx = {
+      var claimTx = {
         Account: account,
         TransactionType: 'ClaimReward',
         Issuer: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
@@ -1100,7 +1100,7 @@ async function monitor_claimreward(){
       consoleLog(`${GN}account is within a claimable timeframe, rewards will be ${reward}, now attempting a claim...${CL}`);
 
       const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
-      const claimTx = {
+      var claimTx = {
         Account: account,
         TransactionType: 'ClaimReward',
         Issuer: 'rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh',
