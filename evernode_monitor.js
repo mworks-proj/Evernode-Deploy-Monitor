@@ -208,7 +208,7 @@ async function monitor_balance(){
     var sequence = sourceData.account_data.Sequence;
 
     if (account != sourceAccount) {
-      if (parseInt(account_data.Balance) < (xah_balance_threshold * 1000000) ) {
+      if (Number(account_data.Balance) < (xah_balance_threshold * 1000000) ) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
         consoleLog(`${YW}XAH Balance for account ${account} is ${(account_data.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
         consoleLog(`Source account XAH balance = ${(sourceData.account_data.Balance / 1000000)}`);
@@ -281,12 +281,12 @@ async function monitor_balance(){
         var sourceBalance = await GetEvrBalance(sourceAccount);
         logVerbose(`EVR Balance for source account ${sourceAccount} is ${sourceBalance}`);
 
-        if (parseInt(balance) < evr_balance_threshold) {
+        if (Number(balance) < evr_balance_threshold) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
           consoleLog(`${YW}EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
           if (sourceBalance < evr_refill_amount) {
-            consoleLog(`${RD}Not enough funds in source account ${sourceAccount} to fill other accounts with EVR${CL}`);
+            consoleLog(`${RD}Not enough funds in source account ${sourceAccount} to fill accounts with EVR${CL}`);
             logVerbose("Source Account EVR Balance " + sourceBalance);
             logVerbose("evr_refill_amount =  " + evr_refill_amount);
             if (!fs.existsSync(filePath)) {
@@ -1068,8 +1068,8 @@ async function monitor_claimreward(){
       };
 
       // auto fee calculations and submit
-      const encode = await lib.binary.encode(claimTx, definitions);
-      feeResponse = await client.send({ command: 'fee', tx_blob: encode });
+      const encoded = await lib.binary.encode(claimTx, definitions);
+      feeResponse = await client.send({ command: 'fee', tx_blob: encoded });
 
       if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
       if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
@@ -1080,8 +1080,8 @@ async function monitor_claimreward(){
       } else {
         if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
         networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
-        claimTx = { ...regularTx, ...networkInfo.txValues };
-        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(regularTx, xahaud, keypair);
+        claimTx = { ...claimTx, ...networkInfo.txValues };
+        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(claimTx, xahaud, keypair);
         logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} feeResponse:${feeResponse.drops.open_ledger_fee}`);
       }
 
@@ -1109,8 +1109,8 @@ async function monitor_claimreward(){
         Fee: "0",
         SigningPubKey: "",
       };
-      const encode = await lib.binary.encode(claimTx, definitions);
-      feeResponse = await client.send({ command: 'fee', tx_blob: encode });
+      const encoded = await lib.binary.encode(claimTx, definitions);
+      feeResponse = await client.send({ command: 'fee', tx_blob: encoded });
 
       // auto fee calculations and submit
       if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
@@ -1122,8 +1122,8 @@ async function monitor_claimreward(){
       } else {
         if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
         networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
-        claimTx = { ...regularTx, ...networkInfo.txValues };
-        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(regularTx, xahaud, keypair);
+        claimTx = { ...claimTx, ...networkInfo.txValues };
+        var { response: { engine_result: claimTxResult } } = await lib.signAndSubmit(claimTx, xahaud, keypair);
         logVerbose(`\nfee no adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
       }
 
