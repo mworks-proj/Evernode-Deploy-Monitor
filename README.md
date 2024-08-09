@@ -1,6 +1,6 @@
 # Evernode monitor
 
-This nodejs script will help you in the monitoring and managing all of your evernodes accounts.
+This nodejs script will help you in the monitoring and managing all of your evernodes accounts (including reputation accounts).
 
 this fork adds;
     wallet_setup module,
@@ -9,8 +9,12 @@ this fork adds;
     auto fee escalation/calculation, 
     and also fixes a number of bugs.
 
-It is made of 5 modules:
+It is made of 5 modules, heres a overview, with links to a more detailed description...
 
+# Table of Contents
+---
+
+    - [Xahau RPC/WSS Submission Node](#xahau-rpcwss-submission-node)
 1. wallet_setup, used to setup new un-activated wallets, so they are fully ready for evernode install (activating, settng trustline, sending EVR, settng regularkey, and will also push data to .env file)
 2. transfer_funds, Move all EVR/XAH from your node accounts to source account.
 3. monitor_balance, check and send EVR/XAH to your accounts when the balance is below a certain threshold (configurable).
@@ -240,3 +244,12 @@ cd evernode_monitor && chmod +x update.sh && sudo ./update.sh
 
 
 ## Use at your own risk. Double check your addresses before running the script!
+
+# Contributors:  
+This was all made possible by [@inv4fee2020](https://github.com/inv4fee2020/), this is 98% his work, I just copied pasta'd... and fixed his spelling mistakes like "utilising"... ;)
+
+A special thanks & shout out to the following community members for their input & testing;
+- the original forks from [@jellicoe](https://github.com/jellicoe) and [@genesis-one-seven](https://github.com/genesis-one-seven)
+- @XRPSaint for support, and testing.
+- [@tequdev](https://github.com/tequdev/xahau-reward-claim) for his work here on claim-rewards, his work open-source web portal help greatly in the claimreward module
+- many other people within the discord community that helped testing

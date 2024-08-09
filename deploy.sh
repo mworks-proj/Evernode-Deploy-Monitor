@@ -315,7 +315,7 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
       fi
   elif [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ]; then
     msg_error "no $keypair_file file, you need to create one for mainnet use,
-one good method is using a vanity generator like this https://github.com/nhartner/xrp-vanity-address"
+one good method is using a vanity generator like this one https://github.com/nhartner/xrp-vanity-address"
     exit
   elif [ "$use_keypair_file" == "true" ] && [ $(grep -c '^Address' "$keypair_file" 2>&1) -lt 3 ]; then
     msg_error "use_keypair_file is set to true, but there is not enough key pairs in $keypair_file file, minimum is 2 (source, and one for a evernode account)"

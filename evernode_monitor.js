@@ -55,6 +55,7 @@ const alert_repeat_interval_in_minutes = process.env.alert_repeat_interval_in_mi
 const xah_balance_threshold = process.env.xah_balance_threshold;
 const evr_balance_threshold = process.env.evr_balance_threshold;
 const minimum_evr_transfer = process.env.minimum_evr_transfer;
+const xah_transfer = process.env.xah_transfer === 'true' ? true : false;
 const xah_transfer_reserve = process.env.xah_transfer_reserve;
 const xah_refill_amount = process.env.xah_refill_amount;
 const evr_refill_amount = process.env.evr_refill_amount;
@@ -396,7 +397,7 @@ async function transfer_funds(){
       while (true) {
 
         // sweep XAH
-        if ( process.env.xah_transfer == "true" && parseInt(account_data.Balance) > (xah_transfer_reserve * 1000000) ) {
+        if ( process.env.xah_transfer == "true" && Number(account_data.Balance) > Number(xah_transfer_reserve * 1000000) ) {
           let xahTx = {
             TransactionType: 'Payment',
             Account: account,
@@ -430,10 +431,10 @@ async function transfer_funds(){
           };
 
         } else {
-          if (process.env.xah_transfer) {
+          if (xah_transfer) {
             consoleLog(`${YW}XAH Balance is ${(account_data.Balance / 1000000 )} XAH, below the reserve of ${xah_transfer_reserve} XAH, set in .env file, skipping account...${CL}`);
           } else {
-            consoleLog(`${YW}XAH Balance is ${account_data.Balance} XAH, XAH sweep is set to false, skipping account...${CL}`)
+            consoleLog(`${YW}XAH Balance is ${account_data.Balance} XAH, XAH sweep is set to false, skipping account...${CL}`);
           }
 
         }
@@ -1012,7 +1013,16 @@ async function monitor_claimreward(){
   consoleLog(" ---------------- ");
   consoleLog(" ");
 
-  for (const account of accounts) {
+  if (reputationAccounts.length != 0 ) {
+    var allAccounts = accounts.concat(reputationAccounts);
+  } else {
+    consoleLog("no reputation accounts to check")
+    var allAccounts = accounts;
+  }
+  consoleLog("checking XAH levels on all " + accounts.length + " accounts and " + reputationAccounts.length + " reputation accounts, with total amount of " + allAccounts.length + " to check...");
+  logVerbose(`allAccounts --> ${allAccounts}`);
+
+  for (const account of allAccounts) {
     consoleLog("starting check on account " + account);
 
     var { account_data } = await client.send({ command: "account_info", account })
