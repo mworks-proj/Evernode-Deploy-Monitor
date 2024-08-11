@@ -82,18 +82,20 @@ function cleanup() {
 }
 
 function exit-script() {
-  clear
+  # clear
   echo -e "⚠  User exited script \n"
   exit
 }
 
 TEMP_DIR=$(mktemp -d)
 gadget_encrypt="ipinfo.io/ip"
+INTEGER='^[0-9]+([.][0-9]+)?$'
 pushd $TEMP_DIR >/dev/null
 
 ###################################################################################
 # used for testnet account setup/generation
 function extract_json_add_to_file() {
+  local file="${1:-$keypair_file}"
   local capture_json=false
   local json=""
 
@@ -119,7 +121,7 @@ function extract_json_add_to_file() {
 
   # Format output, and add a properly generated line to key_pair.txt
   if [ "$address" != "" ]; then 
-    printf "Address: %s Seed: %s\n" $address $seed >> "$keypair_file"
+    printf "Address: %s Seed: %s\n" $address $seed >> "$file"
     return 0
   fi
   return 1
@@ -255,16 +257,20 @@ do you want re-generate new .env file?
       source .env
     fi
   fi
+  
   if [ "$use_testnet" == "true" ]; then DEPLOYMENT_NETWORK="testnet"; else DEPLOYMENT_NETWORK="mainnet"; fi
 
-  # check key_pair files and .env for accounts etc and report
-  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && [ $(grep -c '^Address' "$keypair_file" 2>/dev/null || echo "0" ) -lt 2 ] ); then 
-    touch $keypair_file
+  if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count="0"; fi
 
+  if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_file"); else key_pair_rep_count="0"; fi
+
+  # check key_pair file for accounts etc and report
+  if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && (( key_pair_count < 2 )) ); then 
+    touch $keypair_file
     while true; do
       if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --inputbox "the \"use_keypair_file\" is set to true,
 with incorrect amount of key pairs in $keypair_file file
-key pairs found in file :$(grep -c '^Address' "$keypair_file" 2>&1),
+$key_pair_count key pairs found in file,
 
 enter amount of testnet accounts to create. (minimum is 2) 
 or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 3>&1 1>&2 2>&3); then
@@ -280,7 +286,7 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
           fi
           while true; do
             # Run the node testnet wallet generator, and capture address seed to key_pair.txt
-            key_pair_count=$(grep -c '^Address' "$keypair_file" 2>&1) || true
+            if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count= 0; fi
             if [[ $NUM_VMS -gt $key_pair_count ]]; then
               msg_info_ "generating keypairs, total so far $key_pair_count of $NUM_VMS (attempt $attempt, CTRL+C to exit !)         "
               node $TEMP_DIR/test-account-generator.js  2>/dev/null | extract_json_add_to_file 2>/dev/null || msg_info_ "timed out generating number $(( key_pair_count + 1 )), waiting a bit then trying again (we are on attempt $attempt)   ";  sleep 20; attempt=$((attempt + 1)); continue
@@ -296,7 +302,45 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
       fi
     done
 
-  elif ! [[ $(wc -l < "$keypair_file") -eq $(grep -c '^Address' "$keypair_file") ]]; then
+  # check key_pair_rep file for reputation accounts and report
+  elif ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_rep_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && (( key_pair_rep_count < 1 )) ); then 
+    touch $keypair_rep_file
+    while true; do
+      if NUM_VMS=$(whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --inputbox "the \"use_keypair_file\" is set to true,
+with incorrect amount of key pairs in $keypair_rep_file file
+$key_pair_rep_count key pairs found in file,
+
+enter amount of testnet accounts to create. (minimum is 1) 
+or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 3>&1 1>&2 2>&3); then
+        if ! [[ $NUM_VMS =~ $INTEGER ]]; then
+          whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "needs to be a number" 8 58
+        elif [[ $NUM_VMS == 0 ]]; then
+          break
+        else
+          touch "$keypair_file"
+          attempt=1
+          if [  ! -f "$TEMP_DIR/test-account-generator.js" ]; then
+            wget -q -O $TEMP_DIR/test-account-generator.js "https://gadget78.uk/test-account-generator.js" || msg_error "failed to download testnet account generator, restart script to try again"
+          fi
+          while true; do
+            # Run the node testnet wallet generator, and capture address seed to key_pair.txt
+            if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_file"); else key_pair_rep_count="0"; fi
+            if [[ $NUM_VMS -gt $key_pair_count ]]; then
+              msg_info_ "generating keypairs, total so far $key_pair_count of $NUM_VMS (attempt $attempt, CTRL+C to exit !)         "
+              node $TEMP_DIR/test-account-generator.js  2>/dev/null | extract_json_add_to_file $keypair_rep_file 2>/dev/null || msg_info_ "timed out generating number $(( key_pair_count + 1 )), waiting a bit then trying again (we are on attempt $attempt)   ";  sleep 20; attempt=$((attempt + 1)); continue
+              sleep 2
+            else
+              msg_ok "generated $NUM_VMS key pairs, and saved them in $keypair_rep_file ready for the evernode installs/wallet management"
+              break 2
+            fi
+          done
+        fi
+      else
+        exit-script
+      fi
+    done
+    
+  elif ! [[ $(wc -l < "$keypair_file") -eq $key_pair_count ]]; then
       if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
                 --defaultno --colors --title "problem detected" \
                 --yesno "not every line in $keypair_file\nseems to start with \"Address:\"?\n\n\Zb\Z1this WILL cause issues, and needs to be fixed.\Zn\n\ncontinue to use Wallet Manager anyhows?" 12 58 ; then
@@ -304,11 +348,10 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
       else
         exit
       fi
-  elif ! [[ $(wc -l < "$keypair_rep_file") -eq $(grep -c '^Address' "$keypair_rep_file") ]]; then
+  elif ! [[ $(wc -l < "$keypair_rep_file") -eq $key_pair_rep_count ]]; then
       if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
-                --defaultno --title "problem detected" \
-                --yesno "not every line in $keypair_rep_file seems to start with \"Address:\"?\n\n\Zb\Z1this WILL cause issues, and needs to be fixed.\Zn\n\ncontinue to use Wallet Manager anyhows?" 12 58 \
-                --colors; then
+                --defaultno --colors --title "problem detected" \
+                --yesno "not every line in $keypair_rep_file\nseems to start with \"Address:\"?\n\n\Zb\Z1this WILL cause issues, and needs to be fixed.\\Zn\n\ncontinue to use Wallet Manager anyhows?" 12 58 ; then
         break
       else
         exit
@@ -317,8 +360,15 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
     msg_error "no $keypair_file file, you need to create one for mainnet use,
 one good method is using a vanity generator like this one https://github.com/nhartner/xrp-vanity-address"
     exit
-  elif [ "$use_keypair_file" == "true" ] && [ $(grep -c '^Address' "$keypair_file" 2>&1) -lt 3 ]; then
-    msg_error "use_keypair_file is set to true, but there is not enough key pairs in $keypair_file file, minimum is 2 (source, and one for a evernode account)"
+  elif [ "$use_keypair_file" == "true" ] && [ $key_pair_count -lt 2 ]; then
+    msg_error "use_keypair_file is set to true, but there is not enough account key pairs in $keypair_file file, minimum is 2 (source, and one for a evernode account)"
+    exit
+  elif [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_rep_file" ]; then
+    msg_error "no $keypair_rep_file file, you need to create one for mainnet use,
+one good method is using a vanity generator like this one https://github.com/nhartner/xrp-vanity-address"
+    exit
+  elif [ "$use_keypair_file" == "true" ] && [ $key_pair_rep_count -lt 1 ]; then
+    msg_error "use_keypair_file is set to true, but there is not enough reputation account key pairs in $keypair_rep_file file, minimum is 2 (source, and one for a evernode account)"
     exit
   fi
 
@@ -356,17 +406,13 @@ one good method is using a vanity generator like this one https://github.com/nha
         fi
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
-        if [[ -r "$keypair_rep_file" ]]; then
-          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
-          total_accounts=$(( total_accounts + total_rep_accounts ))
-        fi
+        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
 
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
-            xahSetupamount_calculated=$(( xahSetupamount * ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
+            xahSetupamount_calculated=$(( xahSetupamount * (key_pair_count - 1) ))
             xah_balance=$(echo "scale=1; $xah_balance / 1000000" | bc)
             if (( $(echo "$xahSetupamount_calculated > $xah_balance" | bc -l) )); then
               xahSetupamount_calculated="\Z1$xahSetupamount_calculated\Zn"
@@ -376,12 +422,12 @@ one good method is using a vanity generator like this one https://github.com/nha
               xah_balance="\Z2$xah_balance\Zn"
             fi
           else
-            xahSetupamount_calculated="\Z1$(( xahSetupamount * ( $(grep -c '^Address' "$keypair_file") - 1 ) ))\Zn"
+            xahSetupamount_calculated="\Z1$(( xahSetupamount * ( key_pair_count - 1 ) ))\Zn"
           fi
 
           evr_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_lines", "params": [ { "account": "'"$source_account"'", "ledger_index": "current" } ] }' "${xahaud_server}" | jq -r 'try .result.lines[] catch "failed" | try select(.currency == "EVR") catch "failed" | try .balance catch "\\Z1no trustline\\Zn"' )
           if [[ "$evr_balance" != *"no trustline"* ]]; then
-            evrSetupamount_calculated=$(( evrSetupamount * ( $(grep -c '^Address' "$keypair_file") -1 ) ))
+            evrSetupamount_calculated=$(( evrSetupamount * ( key_pair_count -1 ) ))
             if (( $(echo "$evrSetupamount_calculated > $evr_balance" | bc -l) )); then
               evrSetupamount_calculated="\Z1$evrSetupamount_calculated\Zn"
               evr_balance="\Z1$evr_balance\Zn"
@@ -390,7 +436,7 @@ one good method is using a vanity generator like this one https://github.com/nha
               evr_balance="\Z2$evr_balance\Zn"
             fi
           else
-            evrSetupamount_calculated="\Z1$(( evrSetupamount * ( $(grep -c '^Address' "$keypair_file") - 1 ) ))\Zn"
+            evrSetupamount_calculated="\Z1$(( evrSetupamount * ( key_pair_count - 1 ) ))\Zn"
           fi
         else
           xahaud_server_working="\Zb\Z1failed to connect\Zn"
@@ -402,7 +448,7 @@ one good method is using a vanity generator like this one https://github.com/nha
        --title "Wallet Setup Module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
-    This module is used to prepare key-pairs both files
+    This module is used to prepare both key-pairs files
     \"$keypair_file\" and \"$keypair_rep_file\" files.
     It uses the first key-pair in \"$keypair_file\" for the source of XAH/EVR.
     Key pairs are prepared by:
@@ -446,11 +492,7 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 32
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
-        if [[ -r "$keypair_rep_file" ]]; then
-          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
-          total_accounts=$(( total_accounts + total_rep_accounts ))
-        fi
+        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account="$sourceAccount"
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
@@ -475,7 +517,7 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 32
        --title "transfer_funds module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
-    This module is used to sweep EVR and XAH from all accounts to the source account 
+    This module is used to sweep EVR and XAH from all evernodes to the source account 
     it does this by utilising the regular key secret.
     so this needs to be set on all accounts (can be done with wallet setup module)
 
@@ -483,6 +525,7 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 32
     use_testnet = \"$use_testnet\"
     xahau server = \"$xahaud_server\"
     XAH transfer/sweep = \"$xah_transfer\"
+    amount of XAH to leave in account = \"$xah_transfer_reserve\"
     minimum_EVR to trigger transfer = \"$minimum_evr_transfer\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
@@ -491,10 +534,10 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 32
     xahau server working = \"$xahaud_server_working\"
     total accounts to be swept = \"$total_accounts\"
     source account/regular key = \"$source_account\"
-    current XAH amount in account = \"$xah_balance\"
-    current EVR amount in account = \"$evr_balance\"
+    current XAH amount in source account = \"$xah_balance\"
+    current EVR amount in source account = \"$evr_balance\"
 
-Do you want to use the above settings to sweep accounts?" 25 100; then
+Do you want to use the above settings to sweep accounts?" 25 104; then
           clear
           node evernode_monitor.js transfer_funds
           echo ""
@@ -511,11 +554,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
-        if [[ -r "$keypair_rep_file" ]]; then
-          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
-          total_accounts=$(( total_accounts + total_rep_accounts ))
-        fi
+        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account="$sourceAccount"
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
@@ -550,7 +589,9 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
     xahau server = \"$xahaud_server\"
     XAH transfer sweep = \"$xah_transfer\"
     xah_balance_threshold to trigger topup = \"$xah_balance_threshold\"
+    amount of XAH to send = \"$xah_refill_amount\"
     evr_balance_threshold to trigger topup = \"$evr_balance_threshold\"
+    amount of EVR to send = \"$evr_refill_amount\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
 
@@ -558,10 +599,10 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
     xahau server working = \"$xahaud_server_working\"
     total accounts to be swept = \"$total_accounts\"
     source account = \"$source_account\"
-    current XAH amount in account = \"$xah_balance\"
-    current EVR amount in account = \"$evr_balance\"
+    current XAH amount in source account = \"$xah_balance\"
+    current EVR amount in source account = \"$evr_balance\"
 
-      Do you want to use the above settings to check balances and topup?" 25 100; then
+      Do you want to use the above settings to check balances and topup?" 25 104; then
           clear
           node evernode_monitor.js monitor_balance
           echo ""
@@ -578,7 +619,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-          total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
+          total_accounts=$(( key_pair_count -1 ))
         else
           source_account="$sourceAccount"
           total_accounts=$(echo "$accounts" | wc -l)
@@ -601,8 +642,11 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
 
         if [[ "$destinationEmail" != "" || "$destinationEmail" != "< your destination email >" ]]; then
-          #email_used="$destinationEmail"
-          email_used="\Z1NOT SET\Zn"
+          if [ "$email_notification" == "true"]; then 
+            email_used="\Z1NOT SET\Zn"
+          else
+            email_used="NOT SET"
+          fi
         else
           if [ "$smtpEmail" == "<your account email in Brevo>" ]; then
             email_used="\Z1NOT SET\Zn"
@@ -612,6 +656,14 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         fi
 
         IFS=$'\n' read -r -d '' -a push_addresses <<< "$push_addresses" || true
+        if [ "$push_notification" == "true"]; then 
+          push_address_count=${#push_addresses[@]}
+          if [ "$push_address_count" == "0" ]; then
+            push_address_count="\Z10\Zn"
+          fi
+        else
+          push_address_count=${#push_addresses[@]}
+        fi
 
         if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "monitor_heartbeats module" --colors \
@@ -626,17 +678,18 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
     xahau server = \"$xahaud_server\"
     minutes_from_last_heartbeat_alert_threshold = \"$minutes_from_last_heartbeat_alert_threshold\"
     the interval (in minutes) between sending alert = \"$alert_repeat_interval_in_minutes\"
+
     email_notification enabled = \"$email_notification\"
-    email being used = \"$email_used\"
+    - email being used = \"$email_used\"
     UptimeKuma push_notification enabled = \"$push_notification\"
-    using UptimeKuma push_url = \"$push_url\"
-    number of addresses in push_addresses = \"${#push_addresses[@]}\"
+    - using UptimeKuma push_url = \"$push_url\"
+    - number of addresses in push_addresses = \"$push_address_count\"
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
     total evernodes to be checked = \"$total_accounts\"
 
-      Do you want to use the above settings to check heartbeats?" 25 100; then
+      Do you want to use the above settings to check heartbeats?" 25 104; then
           clear
           node evernode_monitor.js monitor_heartbeat
           echo ""
@@ -653,11 +706,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( ( $(grep -c '^Address' "$keypair_file") - 1 ) ))
-        if [[ -r "$keypair_rep_file" ]]; then
-          total_rep_accounts=$( grep -c '^Address' "$keypair_rep_file"  || echo "0" )
-          total_accounts=$(( total_accounts + total_rep_accounts ))
-        fi
+        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account="$sourceAccount"
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
@@ -677,8 +726,8 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
        --title "monitor_claimrewards module" --colors \
        --yesno "\
 \Z0\ZbInfo on module:\Zn
-    This module iterates through all the accounts,
-    checks if the account has been registered for balance adjustment rewards
+    This module iterates through ALL accounts (evernodes, and reputation accounts),
+    will check if the account has been registered for balance adjustment rewards,
     if it has not, it will register.
     then will check and report if it can claim,
     and will tell you the amount claimable, date, and claim if possible.
@@ -689,7 +738,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total evernodes to be checked = \"$total_accounts\"
+    total accounts to be checked = \"$total_accounts\"
 
       Do you want to use the above settings to check registrations?" 25 100; then
           clear
@@ -708,10 +757,10 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$sourceAccount
-          total_accounts=$(( $(grep -c '^Address' "$keypair_file") -1 ))
+          total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-          total_accounts=$(echo "$accounts" | wc -l)
+          total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -735,8 +784,8 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
 \Z0\ZbInfo on module:\Zn
     This module will install the evernode-deploy-monitor to run regularly depending on
     cronjob_main_hours setting in .env file, which is the amount of hours between triggers.
-    it will also setup a seperate cronjob for the heartbeat module, that depends on
-    cronjob_heartbeat_mins setting in .env file. which is the amount minutes between the triggers.
+    it will also setup a seperate cronjob for the heartbeat module, which depends on
+    cronjob_heartbeat_mins setting in .env file. which is the amount of minutes between triggers.
     you can manually run and test heartbeat module via main menu, option 4
     (setting cronjob times to zero, and running setting will disable/delete entry)
 
@@ -841,7 +890,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
               clear
               if [ -z "$push_url" ] || [ -z "$push_user" ] || [ -z "$push_pass" ]; then
                 echo ".env file not setup will all needed settings, check push_url, push_user, and push_pass entries and retry"
-              elif [ ! -f "$keypair_file" ] || [ "$(( $(grep -c '^Address' "$keypair_file") - 2 ))" -eq 0 ]; then
+              elif [ ! -f "$keypair_file" ] || [ "$(( key_pair_count - 1 ))" -eq 0 ]; then
                 echo "Not enough addresses to create files in $keypair_file."
               elif ! curl -s -f "$push_url" > /dev/null; then
                 echo "unable to communicate with $push_url, this needs to be set properly as a fully working URL to your UptimeKuma page"
@@ -856,7 +905,7 @@ Do you want to use the above settings to sweep accounts?" 25 100; then
                 kuma_monitor_list=$(/root/uptime-kuma/kuma_cli --url $push_url --username $push_user --password $push_pass monitor list)
                 echo "Amount of monitors found already on your uptime kuma = $(echo "$kuma_monitor_list" | jq 'length')"
 
-                for (( id=3; id<=$(( $(grep -c '^Address' "$keypair_file") )); id++ ))
+                for (( id=3; id<=$(( key_pair_count )); id++ ))
                 do
                   # Extract the token_id (first 16 characters of the line)
                   token_id=$(grep '^Address' "$keypair_file" | sed -n "${id}p" | cut -c 10-26)
@@ -939,12 +988,14 @@ EOF
       elif [ "$WALLET_TASK" == "8" ]; then
         nano /root/evernode-deploy-monitor/.env
         source /root/evernode-deploy-monitor/.env
-      ######### key_pait.txt edit
+      ######### key_pair.txt edit
       elif [ "$WALLET_TASK" == "9" ]; then
         nano $keypair_file
-      ######### key_pait_rep.txt edit
+        if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count="0"; fi
+      ######### key_pair_rep.txt edit
       elif [ "$WALLET_TASK" == "0" ]; then
         nano $keypair_rep_file
+        if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_file"); else key_pair_rep_count="0"; fi
       ######### help area
       elif [ "$WALLET_TASK" == "h" ]; then
         while true; do
