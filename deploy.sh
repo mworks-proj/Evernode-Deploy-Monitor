@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.1
+ver=1.2
 
 ###################################################################################
 # message functions for script
@@ -262,7 +262,7 @@ do you want re-generate new .env file?
 
   if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count="0"; fi
 
-  if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_file"); else key_pair_rep_count="0"; fi
+  if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_rep_file"); else key_pair_rep_count="0"; fi
 
   # check key_pair file for accounts etc and report
   if ( [ "$use_keypair_file" == "true" ] && [ ! -f "$keypair_file" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] ) || ( [ "$use_keypair_file" == "true" ] && [ "$DEPLOYMENT_NETWORK" == "testnet" ] && (( key_pair_count < 2 )) ); then 
@@ -327,7 +327,7 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
             if [ -s "$keypair_rep_file" ]; then key_pair_rep_count=$(grep -c '^Address' "$keypair_file"); else key_pair_rep_count="0"; fi
             if [[ $NUM_VMS -gt $key_pair_count ]]; then
               msg_info_ "generating keypairs, total so far $key_pair_count of $NUM_VMS (attempt $attempt, CTRL+C to exit !)         "
-              node $TEMP_DIR/test-account-generator.js  2>/dev/null | extract_json_add_to_file $keypair_rep_file 2>/dev/null || msg_info_ "timed out generating number $(( key_pair_count + 1 )), waiting a bit then trying again (we are on attempt $attempt)   ";  sleep 20; attempt=$((attempt + 1)); continue
+              node $TEMP_DIR/test-account-generator.js  2>/dev/null | extract_json_add_to_file $keypair_rep_file 2>/dev/null || msg_info_ "timed out generating number $(( key_pair_count )), waiting a bit then trying again (we are on attempt $attempt)   ";  sleep 20; attempt=$((attempt + 1)); continue
               sleep 2
             else
               msg_ok "generated $NUM_VMS key pairs, and saved them in $keypair_rep_file ready for the evernode installs/wallet management"
@@ -339,7 +339,7 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
         exit-script
       fi
     done
-    
+
   elif ! [[ $(wc -l < "$keypair_file") -eq $key_pair_count ]]; then
       if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
                 --defaultno --colors --title "problem detected" \
@@ -1113,11 +1113,11 @@ function update_script() {
 
 ###################################################################################
 function evernode_deploy_script() {
-  if curl -s -f "https://deploy.zerp.network/" > /dev/null; then
-    ENTRY_STRING=$(curl -s $gadget_encrypt | base64 | tr '+/' '-_' | tr -d '=' )
-    DEPLOY_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://deploy.zerp.network/$ENTRY_STRING.sh)
+  ENTRY_STRING=$(curl -s $gadget_encrypt | base64 | tr '+/' '-_' | tr -d '=' )
+  DEPLOY_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://deploy.zerp.network/$ENTRY_STRING.sh)
+  if curl -s -f "https://deploy.zerp.network" > /dev/null; then
     if [ "$DEPLOY_STATUS" == "403" ]; then
-      whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "you dont have access to the evernode deploy script,
+      whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "you dont have full access to the evernode deploy script,
 contact @gadget78 for access.
 giving him this code $ENTRY_STRING" 10 58
       exit
@@ -1131,7 +1131,8 @@ or just try again in 15 mins" 10 58
     fi
   else
     whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "unable to connect to deploy server?
-contact @gadget78" 8 58
+contact @gadget78 for access.
+giving him this code $ENTRY_STRING" 10 58
     exit
   fi
 }
