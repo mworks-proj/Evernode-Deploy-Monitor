@@ -542,7 +542,7 @@ async function monitor_heartbeat() {
   consoleLog(" ---------------- ");
 
   var accountIndex = 1;
-  if (use_keypair_file) { var sliceAmount = 2 } else { var sliceAmount = 0 };
+  if (use_keypair_file) { var sliceAmount = 1 } else { var sliceAmount = 0 };
   for (const account of accounts.slice(sliceAmount)) {
     consoleLog("checking account heartbeat on account " + accountIndex + ", " + account);
     await checkAccountHeartBeat(account, accountIndex);
