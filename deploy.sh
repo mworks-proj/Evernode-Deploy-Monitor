@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.2
+ver=1.3
 
 ###################################################################################
 # message functions for script
@@ -248,10 +248,10 @@ function wallet_management_script() {
   fi
   msg_ok "pre-checks complete."
 
-  if [ -z "${monitor_ver:-}" ] || [ "${monitor_ver:-0}" -lt 2 ]; then
+  if [ -z "${monitor_ver:-}" ] || [ "${monitor_ver:-0}" -lt 3 ]; then
     if (whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --title ".env missmatch" --yesno ".env version missmatch, you may encounter errors,
-do you want re-generate new .env file?
-(old .env will be backed up to .old.env)" 10 58); then
+do you want re-generate a new .env file?
+(old .env file will be backed up to .old.env)" 10 58); then
       mv .env .old.env
       cp .env.sample .env
       source .env
@@ -378,10 +378,10 @@ one good method is using a vanity generator like this one https://github.com/nha
     if WALLET_TASK=$(dialog --cancel-label "Exit" --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
        --title "Wallet Management" \
        --menu "Which module do you want to start?" 20 78 12 \
-       "1" "Prepare un-activated key-pairs for evernode deployment" \
-       "2" "Initiate a EVR/XAH sweep" \
+       "1" "Initiate a wallet_setup, used to prepare and setup key-pairs" \
+       "2" "Initiate a EVR/XAH fund sweep" \
        "3" "Initiate a balance check and topup" \
-       "4" "Initiate a heartbeat checkup" \
+       "4" "Initiate a heartbeat an reputation checkup" \
        "5" "Initiate claim Reward (aka BalanceAdjustment)" \
        "6" "Install the automated fund sweep, balance and heartbeat monitor" \
        "7" "Install or setup Uptime Kuma" \
@@ -427,7 +427,7 @@ one good method is using a vanity generator like this one https://github.com/nha
 
           evr_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_lines", "params": [ { "account": "'"$source_account"'", "ledger_index": "current" } ] }' "${xahaud_server}" | jq -r 'try .result.lines[] catch "failed" | try select(.currency == "EVR") catch "failed" | try .balance catch "\\Z1no trustline\\Zn"' )
           if [[ "$evr_balance" != *"no trustline"* ]]; then
-            evrSetupamount_calculated=$(( evrSetupamount * ( key_pair_count -1 ) ))
+            evrSetupamount_calculated=$(( ( evrSetupamount * ( key_pair_count -1 ) ) + ( evrSetupamount_rep * ( key_pair_rep_count ) ) ))
             if (( $(echo "$evrSetupamount_calculated > $evr_balance" | bc -l) )); then
               evrSetupamount_calculated="\Z1$evrSetupamount_calculated\Zn"
               evr_balance="\Z1$evr_balance\Zn"
@@ -462,7 +462,8 @@ one good method is using a vanity generator like this one https://github.com/nha
     use_testnet = \"$use_testnet\"
     xahau server = \"$xahaud_server\"
     XAH to send = \"$xahSetupamount\"
-    EVR to send = \"$evrSetupamount\"
+    EVR to evernode accounts = \"$evrSetupamount\"
+    EVR to reputation accounts = \"$evrSetupamount_rep\"
     set_regular_key = \"$set_regular_key\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
@@ -470,12 +471,13 @@ one good method is using a vanity generator like this one https://github.com/nha
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total accounts to be activated = \"$total_accounts\"
+    evernode accounts to be parsed = \"$((key_pair_count -1))\"
+    reputation accounts to be parsed = \"$key_pair_rep_count\"
     source account = \"$source_account\"
     total XAH needed = \"$xahSetupamount_calculated\" | amount in source account = \"$xah_balance\"
     total EVR needed = \"$evrSetupamount_calculated\" | amount in source account = \"$evr_balance\"
 
-Do you want to use the above settings to setup all $total_accounts accounts?" 32 100; then
+Do you want to use the above settings to setup all $total_accounts accounts?" 36 104; then
           clear
           node evernode_monitor.js wallet_setup && echo "sucessfull pass"
           echo ""
@@ -532,12 +534,13 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 32
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total accounts to be swept = \"$total_accounts\"
+    evernode accounts to be swept = \"$((key_pair_count -1))\"
+    reputation accounts to be swept = \"$key_pair_rep_count\"
     source account/regular key = \"$source_account\"
     current XAH amount in source account = \"$xah_balance\"
     current EVR amount in source account = \"$evr_balance\"
 
-Do you want to use the above settings to sweep accounts?" 25 104; then
+Do you want to use the above settings to sweep \"$total_accounts\" accounts?" 32 104; then
           clear
           node evernode_monitor.js transfer_funds
           echo ""
@@ -587,7 +590,6 @@ Do you want to use the above settings to sweep accounts?" 25 104; then
 \Z0\ZbSettings:\Zn
     use_testnet = \"$use_testnet\"
     xahau server = \"$xahaud_server\"
-    XAH transfer sweep = \"$xah_transfer\"
     xah_balance_threshold to trigger topup = \"$xah_balance_threshold\"
     amount of XAH to send = \"$xah_refill_amount\"
     evr_balance_threshold to trigger topup = \"$evr_balance_threshold\"
@@ -597,12 +599,13 @@ Do you want to use the above settings to sweep accounts?" 25 104; then
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total accounts to be swept = \"$total_accounts\"
+    evernode accounts to check = \"$((key_pair_count -1))\"
+    reputation accounts to check = \"$key_pair_rep_count\"
     source account = \"$source_account\"
     current XAH amount in source account = \"$xah_balance\"
     current EVR amount in source account = \"$evr_balance\"
 
-      Do you want to use the above settings to check balances and topup?" 25 104; then
+Do you want to use the above settings to check \"$total_accounts\" account balances?" 32 104; then
           clear
           node evernode_monitor.js monitor_balance
           echo ""
@@ -689,7 +692,7 @@ Do you want to use the above settings to sweep accounts?" 25 104; then
     xahau server working = \"$xahaud_server_working\"
     total evernodes to be checked = \"$total_accounts\"
 
-      Do you want to use the above settings to check heartbeats?" 25 104; then
+Do you want to use the above settings to check heartbeats?" 30 104; then
           clear
           node evernode_monitor.js monitor_heartbeat
           echo ""
@@ -738,9 +741,10 @@ Do you want to use the above settings to sweep accounts?" 25 104; then
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    total accounts to be checked = \"$total_accounts\"
+    evernode accounts to check = \"$((key_pair_count -1))\"
+    reputation accounts to check = \"$key_pair_rep_count\"
 
-      Do you want to use the above settings to check registrations?" 25 100; then
+Do you want to use the above settings to check \"$total_accounts\" account registrations?" 28 104; then
           clear
           node evernode_monitor.js monitor_claimreward
           echo ""
@@ -808,7 +812,7 @@ Do you want to use the above settings to sweep accounts?" 25 104; then
     main cronjob to run every \"$cronjob_main_hours\" hours
     heartbeat module cronjob to run every \"$cronjob_heartbeat_mins\" minutes
 
-      Do you want to use the above settings to install monitor?" 32 100; then
+Do you want to use the above settings to install monitor?" 32 104; then
             clear
             existing_crontab=$(crontab -l 2>/dev/null)
             cronjob_main="* */$cronjob_main_hours * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js"

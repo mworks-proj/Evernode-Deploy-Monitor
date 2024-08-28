@@ -43,8 +43,9 @@ const run_monitor_heartbeat = process.env.run_monitor_heartbeat === 'true' ? tru
 const run_monitor_claimreward = process.env.run_monitor_claimreward === 'true' ? true : false;
 const use_testnet = process.env.use_testnet === 'true' ? true : false;
 
-const evrSetupamount = process.env.evrSetupamount;
 const xahSetupamount = process.env.xahSetupamount;
+const evrSetupamount = process.env.evrSetupamount;
+const evrSetupamount_rep = process.env.evrSetupamount_rep;
 const set_regular_key = process.env.set_regular_key === 'true' ? true : false;
 const feeStartAmount = process.env.fee;
 const auto_adjust_fee = process.env.auto_adjust_fee === 'true' ? true : false;
@@ -134,7 +135,7 @@ async function getAccounts() {
       logVerbose("error returned ->" + err)
     }
     try {
-      logVerbose(`and ${keypair_rep_file} for reputation account pairs`);
+      consoleLog(`and ${keypair_rep_file} for reputation account pairs`);
       const repdata = await fs.promises.readFile(keypair_rep_file, 'utf8');
       reputationAccounts = await repdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       reputationaccount_seeds = await repdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
@@ -208,11 +209,11 @@ async function monitor_balance(){
     var sequence = sourceData.account_data.Sequence;
 
     if (account != sourceAccount) {
-      if (Number(account_data.Balance) < (xah_balance_threshold * 1000000) ) {
+      if (Number(account_data?.Balance) < (xah_balance_threshold * 1000000) ) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-        consoleLog(`${YW}XAH Balance for account ${account} is ${(account_data.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
-        consoleLog(`Source account XAH balance = ${(sourceData.account_data.Balance / 1000000)}`);
-        if ((sourceData.account_data.Balance / 1000000) < xah_refill_amount) {
+        consoleLog(`${YW}XAH Balance for account ${account} is ${(account_data?.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
+        consoleLog(`Source account XAH balance = ${(sourceData?.account_data?.Balance / 1000000)}`);
+        if ((sourceData?.account_data?.Balance / 1000000) < xah_refill_amount) {
           consoleLog(`${RD}Not enough XAH funds in source account to fill other accounts${CL}`);
           if (!fs.existsSync(filePath)) {
             await sendMail("Insufficient XAH funds", "We tried to send XAH to " + account + " but the source balance in " + sourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
@@ -258,7 +259,7 @@ async function monitor_balance(){
 
         }
       } else {
-        consoleLog(`Balance for account ${account} is ${(account_data.Balance / 1000000)} above the threshold of ${(xah_balance_threshold)}`);
+        consoleLog(`Balance for account ${account} is ${(account_data?.Balance / 1000000)} above the threshold of ${(xah_balance_threshold)}`);
       }
     }
     console.log(" ------- ");
@@ -367,8 +368,8 @@ async function GetEvrBalance(account){
     const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
 
     marker = lines?.marker === marker ? null : lines?.marker
-    logVerbose(`found ${lines.lines.length} trustlines`)
-    lines.lines.forEach(t => {
+    logVerbose(`found ${lines?.lines?.length} trustlines`)
+    lines?.lines?.forEach(t => {
       if (t.currency == "EVR" && t.account == trustlineAddress) {
         logVerbose("found EVR trustline t=" + JSON.stringify(t))
         balance = parseFloat(balance) + parseFloat(t.balance);
@@ -397,11 +398,11 @@ async function transfer_funds(){
       while (true) {
 
         // sweep XAH
-        if ( process.env.xah_transfer == "true" && Number(account_data.Balance) > Number(xah_transfer_reserve * 1000000) ) {
+        if ( process.env.xah_transfer == "true" && Number(account_data?.Balance) > Number(xah_transfer_reserve * 1000000) ) {
           let xahTx = {
             TransactionType: 'Payment',
             Account: account,
-            Amount: (account_data.Balance - (xah_transfer_reserve * 1000000)).toString(),
+            Amount: (account_data?.Balance - (xah_transfer_reserve * 1000000)).toString(),
             Destination: evrDestinationAccount,
             NetworkID: network_id,
             Sequence: account_data.Sequence++
@@ -425,16 +426,16 @@ async function transfer_funds(){
 
           if ( xahResult !== "tesSUCCESS" && xahResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}XAH paymentSweep FAILED TO SEND, ${((account_data.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} > xx ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+            consoleLog(`${RD}XAH paymentSweep FAILED TO SEND, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} > xx ${evrDestinationAccount}, result: ${xahResult}${CL}`);
           } else {   
-          consoleLog(`${GN}XAH paymentSweep sent, ${((account_data.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} --> ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+          consoleLog(`${GN}XAH paymentSweep sent, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} --> ${evrDestinationAccount}, result: ${xahResult}${CL}`);
           };
 
         } else {
           if (xah_transfer) {
-            consoleLog(`${YW}XAH Balance is ${(account_data.Balance / 1000000 )} XAH, below the reserve of ${xah_transfer_reserve} XAH, set in .env file, skipping account...${CL}`);
+            consoleLog(`${YW}XAH Balance is ${(account_data?.Balance / 1000000 )} XAH, below the reserve of ${xah_transfer_reserve} XAH, set in .env file, skipping account...${CL}`);
           } else {
-            consoleLog(`${YW}XAH Balance is ${account_data.Balance} XAH, XAH sweep is set to false, skipping account...${CL}`);
+            consoleLog(`${YW}XAH Balance is ${(account_data?.Balance / 1000000 )} XAH, XAH sweep is set to false, skipping account...${CL}`);
           }
 
         }
@@ -759,8 +760,14 @@ async function wallet_setup(){
         }
 
         // Set trustline and send tokens
-        if (evrSetupamount != 0){
-          const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+        if (reputationAccounts.includes(account)) { var evrAmount = evrSetupamount_rep } else { var evrAmount = evrSetupamount };
+        if (evrAmount != 0) {
+          try { 
+            const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+          } catch (err) {
+            console.error(`Error fetching account data, has this account been activated yet?`);
+            logVerbose("error returned ->" + err)
+          }
           let trustlineTx = {
             TransactionType: 'TrustSet',
             Account: account,
@@ -828,7 +835,7 @@ async function wallet_setup(){
               Account: sourceAccount,
               Amount: {
                 "currency": "EVR",
-                "value": evrSetupamount,
+                "value": evrAmount,
                 "issuer": trustlineAddress
               },
               Destination: account,
@@ -854,9 +861,9 @@ async function wallet_setup(){
 
             if ( tokenResult !== "tesSUCCESS" && tokenResult !== "terQUEUED") { 
               tesSUCCESS = false;
-              consoleLog(`${RD}${evrSetupamount} EVR FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${tokenResult}${CL}`);
+              consoleLog(`${RD}${evrAmount} EVR FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${tokenResult}${CL}`);
             } else {
-              consoleLog(`${GN}${evrSetupamount} EVR sent, ${sourceAccount} --> ${account}, result: ${tokenResult}${CL}`);
+              consoleLog(`${GN}${evrAmount} EVR sent, ${sourceAccount} --> ${account}, result: ${tokenResult}${CL}`);
             }
           }
         }
@@ -1046,8 +1053,8 @@ async function monitor_claimreward(){
     const elapsed = cur - RewardLgrFirst;
     const elapsed_since_last = cur - RewardLgrLast;
     let accumulator = RewardAccumulator;
-    if (account_data && parseFloat(account_data.Balance) > 0 && elapsed_since_last > 0) {
-      accumulator += parseFloat(account_data.Balance) / 1000000 * elapsed_since_last;
+    if (account_data && parseFloat(account_data?.Balance) > 0 && elapsed_since_last > 0) {
+      accumulator += parseFloat(account_data?.Balance) / 1000000 * elapsed_since_last;
     }
     const reward = accumulator / elapsed * rewardRate;
 
@@ -1288,14 +1295,16 @@ async function start(){
     await main();
   };
   client.close();
-  consoleLog('Shutting down...');
   // Workaround so all queued emails are sent. 
   // I had to explicitly call the exit() function as the application was not stopping 
   // in case of Xahaud request failure, I don't know why. 
-  if (email_notification) { 
+  if (email_notification) {
+    consoleLog('waiting for mail to send, before exiting..'); 
     setTimeout(function () {
     exit();
     }, 10000);
+  } else {
+    consoleLog('all finished...');
   }
 };
 start();

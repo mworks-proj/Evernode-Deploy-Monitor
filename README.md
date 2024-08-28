@@ -141,11 +141,11 @@ and the Secondary file `keypair_rep_file` is used JUST for all your reputation a
 
 so when module is ran, 
 
-it 1st sends `xahSetupamount` amount to activate the account (setting this to 0 will skip this stage), 
+it 1st sends `xahSetupamount` amount to activate the account (setting this to 0 will skip this stage, be carefule if account isnt already registered), 
 
-it then sets the trustline, (this is skipped if `evrSetupamount` is set to 0 ) 
+it then sets the trustline, (this is skipped if `evrSetupamount` / `evrSetupAmount_rep is set to 0 ) 
 
-and then sends `evrSetupamount` amount of EVR, ( this is skipped if set to 0 )
+and then sends `evrSetupamount` amount of EVR for evernode accounts, or `evrSetupamount_rep` amount of EVR for reputation accounts , ( this is skipped if set to 0 )
 
 and then sets the "regular key", the address it used is the "source account" address. ( so you can use this module to JUST set regular keys if xah and evr are both set to zero)
 
