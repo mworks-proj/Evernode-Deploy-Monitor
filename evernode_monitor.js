@@ -283,7 +283,7 @@ async function monitor_balance(){
         var sourceBalance = await GetEvrBalance(sourceAccount);
         logVerbose(`EVR Balance for source account ${sourceAccount} is ${sourceBalance}`);
 
-        if (Number(balance) < evr_balance_threshold) {
+        if (balance < evr_balance_threshold) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
           consoleLog(`${YW}EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
