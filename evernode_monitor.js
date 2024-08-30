@@ -396,7 +396,7 @@ async function transfer_funds(){
     var allAccounts = accounts;
   }
   consoleLog("checking " + allAccounts.length + " accounts...");
-  logVerbose(`allAccounts --> ${allAccounts}\n allAccount_seeds -->${allAccount_seeds}`);
+  logVerbose(`allAccounts --> ${allAccounts}\n`);
 
   for (const account of allAccounts) {
     consoleLog("start the transferring process on account " + accountIndex + ", " + account);
