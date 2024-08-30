@@ -391,11 +391,9 @@ async function transfer_funds(){
   if (reputation_transfer) {
     logVerbose("reputation accounts will be checked too")
     var allAccounts = accounts.concat(reputationAccounts);
-    var allAccount_seeds = account_seeds.concat(reputationaccount_seeds);
   } else {
     logVerbose("reputation accounts not being checked")
     var allAccounts = accounts;
-    var allAccount_seeds = account_seeds;
   }
   consoleLog("checking " + allAccounts.length + " accounts...");
   logVerbose(`allAccounts --> ${allAccounts}\n allAccount_seeds -->${allAccount_seeds}`);
@@ -782,62 +780,63 @@ async function wallet_setup(){
 
         // Set trustline and send tokens
         if (reputationAccounts.includes(account)) { var evrAmount = evrSetupamount_rep } else { var evrAmount = evrSetupamount };
-        if (evrAmount != 0) {
+        if (evrAmount != 0 && tesSUCCESS == true) {
           try { 
             var { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+            let trustlineTx = {
+              TransactionType: 'TrustSet',
+              Account: account,
+              LimitAmount: {
+                currency: 'EVR',
+                value: '73000000',
+                issuer: trustlineAddress
+              },
+              NetworkID: network_id,
+              Sequence: sequence
+            };
+
+            // auto fee calculations and submit
+            feeResponse = await client.send({ command: 'fee' });
+            if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
+            if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
+              trustlineTx["Fee"] = feeAmount;
+              try {
+                var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              } catch (err) {
+                console.error(`Error reading secret for account ${loop} : ${account}`);
+                logVerbose("error returned ->" + err)
+              }
+              const { signedTransaction: trustlineTxSigned } = lib.sign(trustlineTx, trustlineKeypair);
+              var { engine_result: trustlineResult } = await client.send({ command: 'submit', 'tx_blob': trustlineTxSigned });
+              logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+            } else {
+              if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
+              networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
+              trustlineTx = { ...trustlineTx, ...networkInfo.txValues };
+              try {
+                var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              } catch (err) {
+                console.error(`Error reading secret for account ${loop} : ${account}`);
+                logVerbose("error returned ->" + err)
+              }
+              var { response: { engine_result: trustlineResult } } = await lib.signAndSubmit(trustlineTx, xahaud, trustlineKeypair);
+              logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
+            }
+
+            if ( trustlineResult !== "tesSUCCESS" && trustlineResult !== "terQUEUED" ) { 
+              tesSUCCESS = false;
+              consoleLog(`${RD}EVR trustline FAILED TO SET on ${account}, result: ${trustlineResult}${CL}`);
+            } else {
+              consoleLog(`${GN}EVR trustline set on ${account}, result: ${trustlineResult}${CL}`);
+            }
           } catch (err) {
-            console.error(`Error fetching account data, has this account been activated yet?`);
+            console.error(`Error setting trustline, has this account been activated yet?`);
             logVerbose("error returned ->" + err);
-          };
-          let trustlineTx = {
-            TransactionType: 'TrustSet',
-            Account: account,
-            LimitAmount: {
-              currency: 'EVR',
-              value: '73000000',
-              issuer: trustlineAddress
-            },
-            NetworkID: network_id,
-            Sequence: sequence
-          };
-
-          // auto fee calculations and submit
-          feeResponse = await client.send({ command: 'fee' });
-          if ( Number(feeResponse.drops.open_ledger_fee) > feeStartAmount && Number(feeResponse.drops.open_ledger_fee) > Number(feeResponse.drops.base_fee) && auto_adjust_fee == true ) { feeAmount = ( Number(feeResponse.drops.open_ledger_fee) + Number(fee_adjust_amount) ).toString() } else { feeAmount = feeResponse.drops.base_fee };
-          if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
-            trustlineTx["Fee"] = feeAmount;
-            try {
-              var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
-            } catch (err) {
-              console.error(`Error reading secret for account ${loop} : ${account}`);
-              logVerbose("error returned ->" + err)
-            }
-            const { signedTransaction: trustlineTxSigned } = lib.sign(trustlineTx, trustlineKeypair);
-            var { engine_result: trustlineResult } = await client.send({ command: 'submit', 'tx_blob': trustlineTxSigned });
-            logVerbose(`\nfee auto adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
-          } else {
-            if ( auto_adjust_fee == true ) { consoleLog(`${YW}maxfee limit reached, swopping to waiting for ledger end for fee calculations${CL}`) };
-            networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
-            trustlineTx = { ...trustlineTx, ...networkInfo.txValues };
-            try {
-              var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
-            } catch (err) {
-              console.error(`Error reading secret for account ${loop} : ${account}`);
-              logVerbose("error returned ->" + err)
-            }
-            var { response: { engine_result: trustlineResult } } = await lib.signAndSubmit(trustlineTx, xahaud, trustlineKeypair);
-            logVerbose(`\nfee NO adjust --> feeStartAmount:${feeStartAmount} feeAmount:${feeAmount} fee_max_amount:${fee_max_amount} fee_open_ledger_fee:${feeResponse.drops.open_ledger_fee} fee_base_fee:${feeResponse.drops.base_fee}`);
-          }
-
-          if ( trustlineResult !== "tesSUCCESS" && trustlineResult !== "terQUEUED" ) { 
             tesSUCCESS = false;
-            consoleLog(`${RD}EVR trustline FAILED TO SET on ${account}, result: ${trustlineResult}${CL}`);
-          } else {
-            consoleLog(`${GN}EVR trustline set on ${account}, result: ${trustlineResult}${CL}`);
-          }
+          };
 
           //wait for trustline to be established
-          if ( tesSUCCESS == true ) {
+          if (tesSUCCESS) {
             var truslineEstablished = false
             while (truslineEstablished == false) {
               const lines = await client.send({ command: 'account_lines', account })
@@ -890,7 +889,7 @@ async function wallet_setup(){
         }
 
         // Set regularKey
-        if (set_regular_key){
+        if (set_regular_key && tesSUCCESS){
           const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
           let regularTx = {
             TransactionType: 'SetRegularKey',
