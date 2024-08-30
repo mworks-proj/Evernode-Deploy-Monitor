@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.3
+ver=1.4
 
 ###################################################################################
 # message functions for script
@@ -82,7 +82,7 @@ function cleanup() {
 }
 
 function exit-script() {
-  # clear
+  clear
   echo -e "⚠  User exited script \n"
   exit
 }
@@ -248,12 +248,31 @@ function wallet_management_script() {
   fi
   msg_ok "pre-checks complete."
 
-  if [ -z "${monitor_ver:-}" ] || [ "${monitor_ver:-0}" -lt 3 ]; then
+  if [ -z "${monitor_ver:-}" ] || [ "${monitor_ver:-0}" -lt 4 ]; then
     if (whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --title ".env missmatch" --yesno ".env version missmatch, you may encounter errors,
-do you want re-generate a new .env file?
-(old .env file will be backed up to .old.env)" 10 58); then
-      mv .env .old.env
-      cp .env.sample .env
+do you want to auto update your .env file?
+(current .env file will be backed up to .old.env)" 10 58); then
+      cp .env .old.env
+			if [ "$monitor_ver" == "1" ]; then
+				sed -i '/^fee_adjust_amount/a\fee_max_amount=10000' .env
+				sed -i '/^run_monitor_heartbeat/a\run_monitor_claimreward="true"' .env
+				sed -i '/^keypair_file/a\keypair_rep_file="/root/key_pair_rep.txt"' .env  
+				sed -i 's/^xahSourceAddress.*/sourceAccount="rSourceAddress"/' .env
+				sed -i '/^xah_transfer/a\xah_transfer_reserve=10' .env
+				sed -i 's/^push_url=.*/push_url="http:\/\/localhost:3001\/"/' .env     
+				sed -i '/^evrSetupamount/a\evrSetupamount_rep=25' .env
+				sed -i '/^xah_transfer_reserve/a\reputation_transfer="false"' .env
+				sed -i 's/^monitor_ver=.*/monitor_ver=4/' .env
+      elif [ "$monitor_ver" == "2" ]; then
+				sed -i '/^evrSetupamount/a\evrSetupamount_rep=25' .env
+				sed -i '/^xah_transfer_reserve/a\reputation_transfer="false"' .env
+				sed -i 's/^monitor_ver=.*/monitor_ver=4/' .env
+			elif [ "$monitor_ver" == "3" ]; then
+				sed -i '/^xah_transfer_reserve/a\reputation_transfer="false"' .env
+				sed -i 's/^monitor_ver=.*/monitor_ver=4/' .env
+			else
+				cp .env.sample .env
+			fi
       source .env
     fi
   fi
@@ -494,10 +513,24 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 36
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
+					account_count=$(( key_pair_count -1 ))
+          if [ "$reputation_transfer" == "true" ]; then
+						account_rep_count="$key_pair_rep_count"
+						total_accounts=$(( account_count + key_pair_rep_count ))
+					else
+						account_rep_count="not enabled"
+						total_accounts=$account_count
+					fi
         else
           source_account="$sourceAccount"
-          total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
+          account_count=$(echo "$accounts" | wc -l)
+					if [ "$reputation_transfer" == "true" ]; then
+          	account_rep_count=$(echo "$reputationAccounts" | wc -l)
+          	total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
+					else
+						account_rep_count="not enabled"
+						total_accounts=$account_count
+					fi
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
           xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
@@ -529,13 +562,14 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 36
     XAH transfer/sweep = \"$xah_transfer\"
     amount of XAH to leave in account = \"$xah_transfer_reserve\"
     minimum_EVR to trigger transfer = \"$minimum_evr_transfer\"
+		reputation_transfer is enabled = \"$reputation_transfer\"
     auto_adjust_fee = \"$auto_adjust_fee\"
     fee_adjust_amount = \"$fee_adjust_amount\"
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    evernode accounts to be swept = \"$((key_pair_count -1))\"
-    reputation accounts to be swept = \"$key_pair_rep_count\"
+    evernode accounts to be swept = \"$account_count\"
+    reputation accounts to be swept = \"$account_rep_count\"
     source account/regular key = \"$source_account\"
     current XAH amount in source account = \"$xah_balance\"
     current EVR amount in source account = \"$evr_balance\"
@@ -557,9 +591,13 @@ Do you want to use the above settings to sweep \"$total_accounts\" accounts?" 32
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
+					account_count="$((key_pair_count - 1))"
+          account_rep_count="$key_pair_rep_count"
+        	total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account="$sourceAccount"
+        	account_count=$(echo "$accounts" | wc -l)
+          account_rep_count=$(echo "$reputationAccounts" | wc -l)
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
@@ -599,8 +637,8 @@ Do you want to use the above settings to sweep \"$total_accounts\" accounts?" 32
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    evernode accounts to check = \"$((key_pair_count -1))\"
-    reputation accounts to check = \"$key_pair_rep_count\"
+    evernode accounts to check = \"$account_count\"
+    reputation accounts to check = \"$account_rep_count\"
     source account = \"$source_account\"
     current XAH amount in source account = \"$xah_balance\"
     current EVR amount in source account = \"$evr_balance\"
@@ -709,9 +747,13 @@ Do you want to use the above settings to check heartbeats?" 30 104; then
         xahaud_server=$(echo "$xahaud_server" | sed -e 's/^wss:/https:/' -e 's/^ws:/http:/')
         if [ "$use_keypair_file" == "true" ]; then
           source_account=$(sed "1q;d" "$keypair_file" | awk '{for (r=1; r<=NF; r++) if ($r == "Address:") print $(r+1)}')
-        total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
+					account_count=$(( key_pair_count - 1 ))
+          account_rep_count=$key_pair_rep_count
+        	total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
         else
           source_account="$sourceAccount"
+          account_count=$(echo "$accounts" | wc -l)
+          account_rep_count=$(echo "$reputationAccounts" | wc -l)
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
@@ -741,8 +783,8 @@ Do you want to use the above settings to check heartbeats?" 30 104; then
 
 \Z0\ZbCheckup:\Zn
     xahau server working = \"$xahaud_server_working\"
-    evernode accounts to check = \"$((key_pair_count -1))\"
-    reputation accounts to check = \"$key_pair_rep_count\"
+    evernode accounts to check = \"$account_count\"
+    reputation accounts to check = \"$account_rep_count\"
 
 Do you want to use the above settings to check \"$total_accounts\" account registrations?" 28 104; then
           clear

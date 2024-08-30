@@ -58,6 +58,7 @@ const evr_balance_threshold = process.env.evr_balance_threshold;
 const minimum_evr_transfer = process.env.minimum_evr_transfer;
 const xah_transfer = process.env.xah_transfer === 'true' ? true : false;
 const xah_transfer_reserve = process.env.xah_transfer_reserve;
+const reputation_transfer = process.env.reputation_transfer === 'true' ? true : false;
 const xah_refill_amount = process.env.xah_refill_amount;
 const evr_refill_amount = process.env.evr_refill_amount;
 let hostMinInstanceCount, hostMaxLeaseAmount, hostReputationThreshold;
@@ -386,7 +387,20 @@ async function transfer_funds(){
   console.log(" ---------------- ");
   consoleLog("Starting the funds transfer module...");
   var accountIndex = 1
-  for (const account of accounts) {
+
+  if (reputation_transfer) {
+    logVerbose("reputation accounts will be checked too")
+    var allAccounts = accounts.concat(reputationAccounts);
+    var allAccount_seeds = account_seeds.concat(reputationaccount_seeds);
+  } else {
+    logVerbose("reputation accounts not being checked")
+    var allAccounts = accounts;
+    var allAccount_seeds = account_seeds;
+  }
+  consoleLog("checking " + allAccounts.length + " accounts...");
+  logVerbose(`allAccounts --> ${allAccounts}\n allAccount_seeds -->${allAccount_seeds}`);
+
+  for (const account of allAccounts) {
     consoleLog("start the transferring process on account " + accountIndex + ", " + account);
     accountIndex++;
     if (account != evrDestinationAccount) {
@@ -595,11 +609,18 @@ async function checkAccountHeartBeat(account, accountIndex) {
   
   if (currentTimestamp - hostInfo.lastHeartbeatIndex > 60 * minutes_from_last_heartbeat_alert_threshold) {
     var faultReason = "heartbeat";
-    consoleLog("heartbeat failure detected");
+    consoleLog(`${hostInfoSTR}`);
+    consoleLog(`${CROSS}${RD}heartbeat failure detected${CL}`);
   };
   if ((hostInfo.maxInstances < hostMinInstanceCount) || (hostInfo.leaseAmount > hostMaxLeaseAmount) || (hostInfo.hostReputation < hostReputationThreshold)) {
-    if ( faultReason == "heartbeat" ) {  var faultReason = "heatbeat+reputation"  } else { var faultReason = "reputation" };
-    consoleLog("reputation fault detected");
+    if ( faultReason == "heartbeat" ) {
+      var faultReason = "heatbeat+reputation";
+      consoleLog(`${CROSS}${RD}and reputation fault detected${CL}`);
+    } else { 
+      var faultReason = "reputation"
+      consoleLog(`${hostInfoSTR}`);
+      consoleLog(`${CROSS}${YW}reputation fault detected${CL}`);
+    };
   };
 
   if (faultReason == "noFault" ) {
@@ -622,7 +643,7 @@ async function handleFailure(account, accountFailed, filePath, accountIndex, hos
     await sendFailure(account, accountIndex, hostInfo, hostInfoSTR, faultReason);
     fs.writeFileSync(filePath, new Date().toString());
   } else if (push_notification) { await sendFailure(account, accountIndex, hostInfo, hostInfoSTR, faultReason) };
-  consoleLog(`${CROSS}${RD} ALERT, DETECTED A EVERNODE DOWN DUE TO, ${faultReason}${CL}`);
+  consoleLog(`${CROSS}${RD} ALERT, DETECTED A EVERNODE FAULT DUE TO, ${faultReason}${CL}`);
 }
 
 // HEARBEAT send Notifications  ........................................................................................................................................................................
@@ -763,11 +784,11 @@ async function wallet_setup(){
         if (reputationAccounts.includes(account)) { var evrAmount = evrSetupamount_rep } else { var evrAmount = evrSetupamount };
         if (evrAmount != 0) {
           try { 
-            const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
+            var { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
           } catch (err) {
             console.error(`Error fetching account data, has this account been activated yet?`);
-            logVerbose("error returned ->" + err)
-          }
+            logVerbose("error returned ->" + err);
+          };
           let trustlineTx = {
             TransactionType: 'TrustSet',
             Account: account,
@@ -786,7 +807,7 @@ async function wallet_setup(){
           if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){
             trustlineTx["Fee"] = feeAmount;
             try {
-              trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
             } catch (err) {
               console.error(`Error reading secret for account ${loop} : ${account}`);
               logVerbose("error returned ->" + err)
@@ -799,7 +820,7 @@ async function wallet_setup(){
             networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
             trustlineTx = { ...trustlineTx, ...networkInfo.txValues };
             try {
-              trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              var trustlineKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
             } catch (err) {
               console.error(`Error reading secret for account ${loop} : ${account}`);
               logVerbose("error returned ->" + err)
@@ -884,7 +905,7 @@ async function wallet_setup(){
           if ( auto_adjust_fee == true && Number(feeAmount) < fee_max_amount ){            
             regularTx["Fee"] = feeAmount;
             try {
-              regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              var regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
             } catch (err) {
               console.error(`Error reading secret for account ${loop} : ${account}`);
               logVerbose("error returned ->" + err)
@@ -897,7 +918,7 @@ async function wallet_setup(){
             networkInfo = await lib.utils.txNetworkAndAccountValues(xahaud, account);
             regularTx = { ...regularTx, ...networkInfo.txValues };
             try {
-              regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
+              var regularKeypair = lib.derive.familySeed(allAccount_seeds[loop]);
             } catch (err) {
               console.error(`Error reading secret for account ${loop} : ${account}`);
               logVerbose("error returned ->" + err)

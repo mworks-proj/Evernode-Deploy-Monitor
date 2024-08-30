@@ -5,7 +5,7 @@ This nodejs script will help you in the monitoring and managing all of your ever
 this fork adds;
     wallet_setup module,
     monitor_claimreward module,
-    the abbility to run each module manually by using the module name after the evernode_monitor.js,
+    the abbility to run each module manually by using the module name after `node evernode_monitor.js`,
     auto fee escalation/calculation,
     FULL wallet_manager GUI,
     evernode deploy script access,
@@ -34,7 +34,7 @@ There are TWO main ways to run this;
 
 ## 1 Wallet Management
 
-first is the easy way, this is using my wallet managment "GUI", this checks and pulls all the needed dependencies  (like this repo and any needed packeges like node, curl and so on)
+first is the easy way, this is using my wallet management "GUI", this checks and pulls all the needed dependencies  (like this repo and any needed packages like node, curl and so on)
 
 ![Wallet Management](walletManagement.png)
 
@@ -166,7 +166,7 @@ along with setting `evrDestinationAccount`, `sourceAccount` and `secret` of that
 *source, and destination accounts can be one of your evernode accounts or a unique address of your choice.*
 *and the EVR destinaton account, can be an exchange as tag is supported.*
 
-This script cycles through your "accounts", gets their EVR balance and if its above the `minimum_evr_transfer` value set in .env file it sends all of the EVR balance to your first EVR account. 
+This script cycles through your all "accounts" depending on `reputation_transfer` setting, it gets their EVR balance and if its above the `minimum_evr_transfer` value set in .env file it sends all of the EVR balance to your first EVR account. 
 
 and depending on `xah_transfer="false"` will depeend if it will also check and transfer XAH funds to. where it will leave `xah_transfer_reserve=10` amunt on the account for reserve
 
