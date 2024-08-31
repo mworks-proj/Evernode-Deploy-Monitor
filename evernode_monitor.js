@@ -249,14 +249,12 @@ async function monitor_balance(){
 
           if ( xahRefillTxResult !== "tesSUCCESS" && xahRefillTxResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}XAH Refill FAILED TO SEND, ${(xah_refill_amount)} XAH ${sourceAccount} > xx ${account_data.Account}, result: ${xahRefillTxResult}${CL}`);
+            consoleLog(`${RD}XAH refill FAILED TO SEND, ${(xah_refill_amount)} XAH ${sourceAccount} > xx ${account_data.Account} (fee:${xahRefillTx.Fee}), result: ${xahRefillTxResult}${CL}`);
           } else {   
-          consoleLog(`${GN}XAH paymentSweep sent, ${(xah_refill_amount)} XAH, ${sourceAccount} --> ${account_data.Account}, result: ${xahRefillTxResult}${CL}`);
+          consoleLog(`${GN}XAH refill payment sent, ${(xah_refill_amount)} XAH, ${sourceAccount} --> ${account_data.Account} (fee:${xahRefillTx.Fee}), result: ${xahRefillTxResult}${CL}`);
           };
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
-
-          sequence++;
 
         }
       } else {
@@ -285,7 +283,7 @@ async function monitor_balance(){
 
         if (( evrBalance < evr_balance_threshold )) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-          consoleLog(`${YW}EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
+          consoleLog(`${YW}EVR balance for ${account} is ${evrBalance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
           if (sourceBalance < evr_refill_amount) {
             consoleLog(`${RD}Not enough funds in source account ${sourceAccount} to fill accounts with EVR${CL}`);
@@ -328,9 +326,9 @@ async function monitor_balance(){
 
             if ( evrRefillTxResult !== "tesSUCCESS" && evrRefillTxResult !== "terQUEUED" ) {
               tesSUCCESS = false;
-              consoleLog(`${RD}EVR Refill FAILED TO SEND, ${evr_refill_amount} EVR ${sourceAccount} > xx ${account}, result: ${evrRefillTxResult}${CL}`);
+              consoleLog(`${RD}EVR Refill FAILED TO SEND, ${evr_refill_amount} EVR ${sourceAccount} > xx ${account} (fee:${evrRefillTx.Fee}), result: ${evrRefillTxResult}${CL}`);
             } else {   
-            consoleLog(`${GN}EVR Refill sent, ${evr_refill_amount} EVR, ${sourceAccount} --> ${account}, result: ${evrRefillTxResult}${CL}`);
+            consoleLog(`${GN}EVR Refill sent, ${evr_refill_amount} EVR, ${sourceAccount} --> ${account} (fee:${evrRefillTx.Fee}), result: ${evrRefillTxResult}${CL}`);
             };
 
             if (fs.existsSync(filePath)) fs.rmSync(filePath);
@@ -418,9 +416,9 @@ async function transfer_funds(){
 
           if ( xahResult !== "tesSUCCESS" && xahResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}XAH paymentSweep FAILED TO SEND, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} > xx ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+            consoleLog(`${RD}XAH paymentSweep FAILED TO SEND, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} > xx ${evrDestinationAccount} (fee:${xahTx.Fee}), result: ${xahResult}${CL}`);
           } else {   
-          consoleLog(`${GN}XAH paymentSweep sent, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} --> ${evrDestinationAccount}, result: ${xahResult}${CL}`);
+          consoleLog(`${GN}XAH paymentSweep sent, ${((account_data?.Balance - (xah_transfer_reserve * 1000000)) / 1000000)} XAH ${account} --> ${evrDestinationAccount} (fee:${xahTx.Fee}), result: ${xahResult}${CL}`);
           };
 
         } else {
@@ -471,9 +469,9 @@ async function transfer_funds(){
 
           if ( evrResult !== "tesSUCCESS" && evrResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}EVR paymentSweep FAILED TO SEND, ${evrBalance} EVR ${account} > xx ${evrDestinationAccount}, result: ${evrResult}${CL}`);
+            consoleLog(`${RD}EVR paymentSweep FAILED TO SEND, ${evrBalance} EVR ${account} > xx ${evrDestinationAccount} (fee:${evrTx.Fee}), result: ${evrResult}${CL}`);
           } else {   
-          consoleLog(`${GN}EVR paymentSweep sent, ${evrBalance} EVR, ${account} --> ${evrDestinationAccount}, result: ${evrResult}${CL}`);
+          consoleLog(`${GN}EVR paymentSweep sent, ${evrBalance} EVR, ${account} --> ${evrDestinationAccount} (fee:${evrTx.Fee}), result: ${evrResult}${CL}`);
           };
         }
 
@@ -736,9 +734,9 @@ async function wallet_setup(){
 
           if ( xahResult !== "tesSUCCESS" && xahResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}${xahSetupamount}XAH FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${xahResult}${CL}`);
+            consoleLog(`${RD}${xahSetupamount}XAH FAILED TO SEND, ${sourceAccount} xxx ${account} (fee:${xahTx.Fee}), result: ${xahResult}${CL}`);
           } else {   
-          consoleLog(`${GN}${xahSetupamount} XAH sent, ${sourceAccount} --> ${account}, result: ${xahResult}${CL}`);
+          consoleLog(`${GN}${xahSetupamount} XAH sent, ${sourceAccount} --> ${account} (fee:${xahTx.Fee}), result: ${xahResult}${CL}`);
           };
         }
 
@@ -789,12 +787,12 @@ async function wallet_setup(){
 
             if ( trustlineResult !== "tesSUCCESS" && trustlineResult !== "terQUEUED" ) { 
               tesSUCCESS = false;
-              consoleLog(`${RD}EVR trustline FAILED TO SET on ${account}, result: ${trustlineResult}${CL}`);
+              consoleLog(`${RD}EVR trustline FAILED TO SET on ${account} (fee:${trustlineTx.Fee}), result: ${trustlineResult}${CL}`);
             } else {
-              consoleLog(`${GN}EVR trustline set on ${account}, result: ${trustlineResult}${CL}`);
+              consoleLog(`${GN}EVR trustline set on ${account} (fee:${trustlineTx.Fee}), result: ${trustlineResult}${CL}`);
             }
           } catch (err) {
-            console.error(`Error setting trustline, has this account been activated yet?`);
+            console.error(`Error setting trustline, has this account been activated with XAH yet? xahSetupamount set to ${xahSetupamount}`);
             logVerbose("error returned ->" + err);
             tesSUCCESS = false;
           };
@@ -845,9 +843,9 @@ async function wallet_setup(){
 
             if ( tokenResult !== "tesSUCCESS" && tokenResult !== "terQUEUED") { 
               tesSUCCESS = false;
-              consoleLog(`${RD}${evrAmount} EVR FAILED TO SEND, ${sourceAccount} xxx ${account}, result: ${tokenResult}${CL}`);
+              consoleLog(`${RD}${evrAmount} EVR FAILED TO SEND, ${sourceAccount} xxx ${account} (fee:${tokenTx.Fee}), result: ${tokenResult}${CL}`);
             } else {
-              consoleLog(`${GN}${evrAmount} EVR sent, ${sourceAccount} --> ${account}, result: ${tokenResult}${CL}`);
+              consoleLog(`${GN}${evrAmount} EVR sent, ${sourceAccount} --> ${account} (fee:${tokenTx.Fee}), result: ${tokenResult}${CL}`);
             }
           }
         }
@@ -892,9 +890,9 @@ async function wallet_setup(){
 
           if ( regularResult !== "tesSUCCESS" && regularResult !== "terQUEUED" ) { 
             tesSUCCESS = false;
-            consoleLog(`${RD}regular key ${sourceAccount} FAILED TO BE SET on ${account}, result: ${regularResult}${CL}`);
+            consoleLog(`${RD}regular key ${sourceAccount} FAILED TO BE SET on ${account} (fee:${regularTx.Fee}), result: ${regularResult}${CL}`);
           } else {
-            consoleLog(`${GN}regular key ${sourceAccount} set on ${account}, result: ${regularResult}${CL}`);
+            consoleLog(`${GN}regular key ${sourceAccount} set on ${account} (fee:${regularTx.Fee}), result: ${regularResult}${CL}`);
           }
         }
 
@@ -1048,7 +1046,7 @@ async function monitor_claimreward(){
 
       if ( claimTxResult !== "tesSUCCESS" && claimTxResult !== "terQUEUED") { 
         tesSUCCESS = false;
-        consoleLog(`${RD}Registration failed, result: ${claimTxResult}${CL}`);
+        consoleLog(`${RD}Registration failed (fee:${claimTx.Fee}), result: ${claimTxResult}${CL}`);
       } else {
         consoleLog(`${GN}Registration sucessfully initialized for ${account}${CL}`);
       }
@@ -1091,7 +1089,7 @@ async function monitor_claimreward(){
 
       if ( claimTxResult !== "tesSUCCESS" && claimTxResult !== "terQUEUED") {
         tesSUCCESS = false;
-        consoleLog(`${RD}claim failed for ${account}, result: ${claimTxResult}${CL}`);
+        consoleLog(`${RD}claim failed for ${account} (fee:${claimTx.Fee}), result: ${claimTxResult}${CL}`);
       } else {
         consoleLog(`${GN}claim success, re-claimed ${reward}${CL}`);
         total_reward_accumulated += reward;
