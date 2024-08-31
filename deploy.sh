@@ -926,7 +926,8 @@ Do you want to use the above settings to install monitor?" 32 104; then
               fi
               echo
               LOCAL_IP=$(hostname -I | awk '{print $1}')
-              echo -e "${CM}${DGN} uptime-kuma installed, and started, you can now configure admin login, and view it at ${BGN}http://${LOCAL_IP}:3001${CL}"
+              echo -e "${CM}${DGN} uptime-kuma installed, and started, you can now configure a admin login, at ${BGN}http://${LOCAL_IP}:3001${CL}"
+							echo -e "${DGN} then enter the user and pass, in the .env under push_user and push_pass, before you auto populate monitors.${CL}"
 
               echo
               read -n 1 -s -r -p "finished, Press any key to continue..."
@@ -958,7 +959,7 @@ Do you want to use the above settings to install monitor?" 32 104; then
                   kuma_monitor_list_id=$(echo "$kuma_monitor_list" | jq -r 'to_entries[] | select(.value.pushToken == "'"$token_id"'") | .key')
                   #echo "$id, $token_id, $kuma_monitor_list"
                   if [ "$kuma_monitor_list_id" == "" ]; then
-                    echo "adding monitor \"evernode $((id - 2))\" with token \"$token_id\""
+                    echo "adding monitor \"evernode $((id - 2))\" with token \"$token_id\"\n"
                     json_content=$(cat <<EOF
 {
   "name": "evernode$((id - 2))",
@@ -996,7 +997,7 @@ EOF
                   sleep 2
                 done
                 echo
-                push_addresses=$(printf '%s\n' "$push_addresses" | sed '$!N;s/\n$//')                 # removed the now undeeded last add newline
+                push_addresses=$(printf '%s\n' "$push_addresses" | sed '$!N;s/\n$//')                 # removed the now uneeded last "added newline"
                 push_addresses=$(echo "$push_addresses" | sed ':a;N;$!ba;s/[&/\]/\\&/g;s/\n/\\n/g')   # checks and adds breakout characters for special characters including newline characters etc
                 sed -i -e "/^push_addresses=/,/^[[:space:]]*$/ {
                   /^push_addresses=/!d

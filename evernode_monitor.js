@@ -279,11 +279,11 @@ async function monitor_balance(){
       var sequence = sourceData.account_data.Sequence;
 
       if (account != sourceAccount) {
-        var balance = await GetEvrBalance(account);
+        var evrBalance = await GetEvrBalance(account);
         var sourceBalance = await GetEvrBalance(sourceAccount);
         logVerbose(`EVR Balance for source account ${sourceAccount} is ${sourceBalance}`);
 
-        if (Number(balance) < Number(evr_balance_threshold)) {
+        if (( evrBalance < evr_balance_threshold )) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
           consoleLog(`${YW}EVR balance for ${account} is ${balance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
@@ -339,7 +339,7 @@ async function monitor_balance(){
 
           }
         } else {
-          consoleLog(`EVR balance for ${account} is ${balance} above the threshold of ${evr_refill_amount}`);
+          consoleLog(`EVR balance for ${account} is ${evrBalance} above the evr_balance_threshold of ${evr_balance_threshold}`);
         }
         
       }
@@ -358,26 +358,6 @@ async function monitor_balance(){
     consoleLog(" ");
     return 1
   }
-}
-
-async function GetEvrBalance(account){
-  logVerbose("getting the EVR balance for " + account);
-  let marker = ''
-  const l = []
-  var balance = 0
-  while (typeof marker === 'string') {
-    const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
-
-    marker = lines?.marker === marker ? null : lines?.marker
-    logVerbose(`found ${lines?.lines?.length} trustlines`)
-    lines?.lines?.forEach(t => {
-      if (t.currency == "EVR" && t.account == trustlineAddress) {
-        logVerbose("found EVR trustline t=" + JSON.stringify(t))
-        balance = parseFloat(balance) + parseFloat(t.balance);
-      }
-    })
-  }
-  return balance;
 }
 
 //.................................................................................................................................................................................................
@@ -452,26 +432,11 @@ async function transfer_funds(){
 
         }
 
-        // sweep EVR
-        let marker = ''
-        const l = []
-        var balance = 0
-        // check EVR exsists, and get EVR balance
-        while (typeof marker === 'string') {
-          const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
-          marker = lines?.marker === marker ? null : lines?.marker
-          //consoleLog(`Got ${lines.lines.length} results`)
-          lines.lines.forEach(t => {
-            if (t.currency == "EVR" && t.account == trustlineAddress) {
-              logVerbose("line data -->" + JSON.stringify(t));
-              balance = parseFloat(balance) + parseFloat(t.balance);
-            }
-          })
-        };
+        var evrBalance = await GetEvrBalance(account);
 
         // check if the EVR balance is enough to sweep
-        if (balance <= minimum_evr_transfer) {
-          consoleLog(`${YW}EVR Balance is ${balance} EVR, below minumum required of ${minimum_evr_transfer} to sweep EVR funds, skipping account...${CL}`);
+        if (evrBalance <= minimum_evr_transfer) {
+          consoleLog(`${YW}EVR Balance is ${evrBalance} EVR, below minumum required of ${minimum_evr_transfer} to sweep EVR funds, skipping account...${CL}`);
         } else {
           // sweep EVR to evrDestinationAccount
           let evrTx = {
@@ -479,7 +444,7 @@ async function transfer_funds(){
             Account: account,
             Amount: {
               "currency": "EVR",
-              "value": balance,
+              "value": evrBalance,
               "issuer": trustlineAddress
             },
             Destination: evrDestinationAccount,
@@ -506,9 +471,9 @@ async function transfer_funds(){
 
           if ( evrResult !== "tesSUCCESS" && evrResult !== "terQUEUED" ) {
             tesSUCCESS = false;
-            consoleLog(`${RD}EVR paymentSweep FAILED TO SEND, ${balance} EVR ${account} > xx ${evrDestinationAccount}, result: ${evrResult}${CL}`);
+            consoleLog(`${RD}EVR paymentSweep FAILED TO SEND, ${evrBalance} EVR ${account} > xx ${evrDestinationAccount}, result: ${evrResult}${CL}`);
           } else {   
-          consoleLog(`${GN}EVR paymentSweep sent, ${balance} EVR, ${account} --> ${evrDestinationAccount}, result: ${evrResult}${CL}`);
+          consoleLog(`${GN}EVR paymentSweep sent, ${evrBalance} EVR, ${account} --> ${evrDestinationAccount}, result: ${evrResult}${CL}`);
           };
         }
 
@@ -712,7 +677,6 @@ async function sendPush(account, accountIndex, pushStatus, pushMSG) {
 //...............................................................................................................................................................................................
 // wallet_setup  ................................................................................................................................................................................
 
-//const wallet_setup = async () => {
 async function wallet_setup(){
   console.log(" ---------------- ");
   consoleLog("Starting initial wallet module...");
@@ -972,36 +936,6 @@ async function wallet_setup(){
   };
 };
 
-// .env file handling  ........................................................................................................................................................................
-
-async function updateEnv(key, value) {
-  const envPath = path.resolve(__dirname, '.env');
-
-  try {
-    let envFileContent = await fs.promises.readFile(envPath, 'utf8');
-
-    // regular expression to match the key (handles cases with or without spaces around '=', and new lines within accounts)
-    const regex = new RegExp(`^\\s*${key}\\s*=\\s*(?:"[^"]*"|[^\\n]*)$`, 'm');
-
-    // Replace the key-value pair if found
-    if (regex.test(envFileContent)) {
-      envFileContent = envFileContent.replace(regex, `${key}="${value}"`);
-    } else {
-      // If key is not found, append it at the end
-      envFileContent += `\n${key}="${value}"\n`;
-    }
-    logVerbose(`Updating ${key} to ${value} in .env`);
-    await fs.promises.writeFile(envPath, envFileContent, 'utf8');
-
-    // Reload the environment variables to reflect the change
-    dotenv.config();
-
-    //logVerbose(`Updated ${key} to ${value} in .env successfully`);
-  } catch (err) {
-    console.error('Error updating .env file:', err);
-  }
-}
-
 //...............................................................................................................................................................................................
 // monitor_claimreward  .........................................................................................................................................................................
 
@@ -1182,8 +1116,61 @@ async function monitor_claimreward(){
   };
 };
 
-// support funcitions
+//...................................................................................................................................................................................................
+// support functions     ............................................................................................................................................................................
 
+// fetch account EVR balance ........................................................................................................................................................................
+async function GetEvrBalance(account){
+  logVerbose("fetching the EVR balance for " + account);
+  let marker = ''
+  let l = []
+  let balance = 0
+  while (typeof marker === 'string') {
+    const lines = await client.send({ command: 'account_lines', account, marker: marker === '' ? undefined : marker })
+
+    marker = lines?.marker === marker ? null : lines?.marker
+    logVerbose(`trustlines found :${lines?.lines?.length}`)
+    lines?.lines?.forEach(t => {
+      if (t.currency == "EVR" && t.account == trustlineAddress) {
+        balance = Number(balance) + Number(t.balance);
+        logVerbose(`found matching trustline of ${trustlineAddress} with balance of ${balance}, full reply -> ${JSON.stringify(t)}`)
+        return isNaN(balance) ? 0 : balance;
+      }
+    })
+  }
+  return isNaN(Number(balance)) ? 0 : balance;
+}
+
+// .env file handling  ........................................................................................................................................................................
+async function updateEnv(key, value) {
+  const envPath = path.resolve(__dirname, '.env');
+
+  try {
+    let envFileContent = await fs.promises.readFile(envPath, 'utf8');
+
+    // regular expression to match the key (handles cases with or without spaces around '=', and new lines within accounts)
+    const regex = new RegExp(`^\\s*${key}\\s*=\\s*(?:"[^"]*"|[^\\n]*)$`, 'm');
+
+    // Replace the key-value pair if found
+    if (regex.test(envFileContent)) {
+      envFileContent = envFileContent.replace(regex, `${key}="${value}"`);
+    } else {
+      // If key is not found, append it at the end
+      envFileContent += `\n${key}="${value}"\n`;
+    }
+    logVerbose(`Updating ${key} to ${value} in .env`);
+    await fs.promises.writeFile(envPath, envFileContent, 'utf8');
+
+    // Reload the environment variables to reflect the change
+    dotenv.config();
+
+    //logVerbose(`Updated ${key} to ${value} in .env successfully`);
+  } catch (err) {
+    console.error('Error updating .env file:', err);
+  }
+}
+
+// claim reward functions .............................................
 function get_exponent(xfl) {
   if (xfl < 0n)
     throw new Error("Invalid XFL");
