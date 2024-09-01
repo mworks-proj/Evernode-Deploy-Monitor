@@ -62,6 +62,7 @@ set -Eeuo pipefail
 trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
 trap cleanup EXIT
 function error_handler() {
+  clear
   if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID > /dev/null; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
   local exit_code="$?"
   local line_number="$1"
@@ -71,7 +72,7 @@ function error_handler() {
   if mount | grep -q '/mnt/evernode-mount'; then
     guestunmount /mnt/evernode-mount/
   fi
-  msg_error "an error occured, see above, cleared temp directoy ($TEMP_DIR), and cleanly exited..."
+  msg_error "an error occured, see above, cleared created temp directoy ($TEMP_DIR), and cleanly exiting..."
 }
 
 function cleanup() {
@@ -428,7 +429,7 @@ one good method is using a vanity generator like this one https://github.com/nha
         total_accounts=$(( (key_pair_count - 1) + key_pair_rep_count ))
 
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")  || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xahSetupamount_calculated=$(( xahSetupamount * (key_pair_count - 1) ))
@@ -533,7 +534,7 @@ Do you want to use the above settings to setup all $total_accounts accounts?" 36
 					fi
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn") || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xah_balance="\Z2$(echo "scale=1; $xah_balance / 1000000" | bc)\Zn"
@@ -601,7 +602,7 @@ Do you want to use the above settings to sweep \"$total_accounts\" accounts?" 32
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn") || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xah_balance="\Z2$(echo "scale=1; $xah_balance / 1000000" | bc)\Zn"
@@ -666,7 +667,7 @@ Do you want to use the above settings to check \"$total_accounts\" account balan
           total_accounts=$(echo "$accounts" | wc -l)
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn") || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xah_balance="\Z2$(echo "scale=1; $xah_balance / 1000000" | bc)\Zn"
@@ -683,7 +684,7 @@ Do you want to use the above settings to check \"$total_accounts\" account balan
         fi
 
         if [[ "$destinationEmail" != "" || "$destinationEmail" != "< your destination email >" ]]; then
-          if [ "$email_notification" == "true"]; then 
+          if [ "$email_notification" == "true" ]; then 
             email_used="\Z1NOT SET\Zn"
           else
             email_used="NOT SET"
@@ -695,15 +696,18 @@ Do you want to use the above settings to check \"$total_accounts\" account balan
             email_used="$smtpEmail"
           fi
         fi
+        if [ "$email_notification" == "true" ]; then email_notification_enabled="\Z2true\Zn"; else email_notification_enabled="\Z1false\Zn"; fi
 
-        IFS=$'\n' read -r -d '' -a push_addresses <<< "$push_addresses" || true
-        if [ "$push_notification" == "true"]; then 
-          push_address_count=${#push_addresses[@]}
+        IFS=$'\n' read -r -d '' -a push_addresses_array <<< "$push_addresses" || true
+        if [ "$push_notification" == "true" ]; then 
+          push_notification_enabled="\Z2true\Zn"
+          push_address_count=${#push_addresses_array[@]}
           if [ "$push_address_count" == "0" ]; then
             push_address_count="\Z10\Zn"
           fi
         else
-          push_address_count=${#push_addresses[@]}
+          push_notification_enabled="\Z1false\Zn"
+          push_address_count=${#push_addresses_array[@]}
         fi
 
         if dialog --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" \
@@ -720,9 +724,10 @@ Do you want to use the above settings to check \"$total_accounts\" account balan
     minutes_from_last_heartbeat_alert_threshold = \"$minutes_from_last_heartbeat_alert_threshold\"
     the interval (in minutes) between sending alert = \"$alert_repeat_interval_in_minutes\"
 
-    email_notification enabled = \"$email_notification\"
+    email_notification enabled = \"$email_notification_enabled\"
     - email being used = \"$email_used\"
-    UptimeKuma push_notification enabled = \"$push_notification\"
+
+    UptimeKuma push_notification enabled = \"$push_notification_enabled\"
     - using UptimeKuma push_url = \"$push_url\"
     - number of addresses in push_addresses = \"$push_address_count\"
 
@@ -757,7 +762,7 @@ Do you want to use the above settings to check heartbeats?" 30 104; then
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn") || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xah_balance="\Z2$(echo "scale=1; $xah_balance / 1000000" | bc)\Zn"
@@ -809,7 +814,7 @@ Do you want to use the above settings to check \"$total_accounts\" account regis
           total_accounts=$(( $(echo "$accounts" | wc -l) + $(echo "$reputationAccounts" | wc -l) ))
         fi
         if curl -s -f "$xahaud_server" > /dev/null; then
-          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn")
+          xahaud_server_working=$(curl -s -f -m 10 -X POST -H "Content-Type: application/json" -d '{"method":"server_info"}' "${xahaud_server}"  | jq -r '.result.status // "\\Z1failed\\Zn"' | xargs -I {} echo "\Z2{}\Zn") || ( clear && whiptail --backtitle "Proxmox VE Helper Scripts: Wallet Management. version $ver" --msgbox "error occured connecting to xahau server $xahaud_server" 8 58 && continue )
           xah_balance=$(curl -s -X POST -H "Content-Type: application/json" -d '{ "method": "account_info", "params": [ { "account": "'"$source_account"'", "strict": true, "ledger_index": "current", "queue": true } ] }' "${xahaud_server}" | jq -r '.result.account_data.Balance // "\\Z1not activated\\Zn"' )
           if [[ "$xah_balance" != *"not activated"* ]]; then
             xah_balance="\Z2$(echo "scale=1; $xah_balance / 1000000" | bc)\Zn"
@@ -855,24 +860,24 @@ Do you want to use the above settings to check \"$total_accounts\" account regis
     heartbeat module cronjob to run every \"$cronjob_heartbeat_mins\" minutes
 
 Do you want to use the above settings to install monitor?" 32 104; then
-            clear
-            existing_crontab=$(crontab -l 2>/dev/null)
-            cronjob_main="* */$cronjob_main_hours * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js"
-            cronjob_heartbeat="*/$cronjob_heartbeat_mins * * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js monitor_heartbeat"
-            if crontab -l | grep -q "/usr/bin/node /root/evernode-deploy-monitor/evernode_monitor.js"; then
-                existing_crontab=$(echo "$existing_crontab" | sed 'node \/root\/evernode-deploy-monitor\/evernode_monitor\.js/d')
-                existing_crontab=$(echo "$existing_crontab" | sed 'node \/root\/evernode-deploy-monitor\/evernode_monitor\.js/d')
-                if [ "$cronjob_main_hours" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_main}" ;fi
-                if [ "$cronjob_heartbeat_mins" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_heartbeat}" ;fi
-                echo -e "${DGN}Cron job updated to run evernode monitor every $cronjob_main_hours hour(s), and heartbeat module every $cronjob_heartbeat_mins minutes${CL}"
-            else
-                if [ "$cronjob_main_hours" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_main}" ;fi
-                if [ "$cronjob_heartbeat_mins" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_heartbeat}" ;fi
-                echo -e "${DGN}Cron job added to run evernode monitor every $cronjob_main_hours hours, and heartbeat module every $cronjob_heartbeat_mins minutes${CL}"
-            fi
-            echo "$existing_crontab" | crontab -
-            echo ""
-            read -n 1 -s -r -p "Press any key to continue..."
+          clear
+          existing_crontab=$(crontab -l 2>/dev/null)
+          cronjob_main="* */$cronjob_main_hours * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js"
+          cronjob_heartbeat="*/$cronjob_heartbeat_mins * * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js monitor_heartbeat"
+          if crontab -l | grep -q "/usr/bin/node /root/evernode-deploy-monitor/evernode_monitor.js"; then
+              existing_crontab=$(echo "$existing_crontab" | sed 'node \/root\/evernode-deploy-monitor\/evernode_monitor\.js/d')
+              existing_crontab=$(echo "$existing_crontab" | sed 'node \/root\/evernode-deploy-monitor\/evernode_monitor\.js/d')
+              if [ "$cronjob_main_hours" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_main}" ;fi
+              if [ "$cronjob_heartbeat_mins" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_heartbeat}" ;fi
+              echo -e "${DGN}Cron job updated to run evernode monitor every $cronjob_main_hours hour(s), and heartbeat module every $cronjob_heartbeat_mins minutes${CL}"
+          else
+              if [ "$cronjob_main_hours" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_main}" ;fi
+              if [ "$cronjob_heartbeat_mins" != "0" ]; then existing_crontab="${existing_crontab}"$'\n'"${cronjob_heartbeat}" ;fi
+              echo -e "${DGN}Cron job added to run evernode monitor every $cronjob_main_hours hours, and heartbeat module every $cronjob_heartbeat_mins minutes${CL}"
+          fi
+          echo "$existing_crontab" | crontab -
+          echo ""
+          read -n 1 -s -r -p "Press any key to continue..."
         fi
       ######### uptime kuma
       elif [ "$WALLET_TASK" == "7" ]; then

@@ -191,8 +191,11 @@ async function monitor_balance(){
   consoleLog("Starting Balance Monitor module....");
   
   tesSUCCESS = "true"
-  var sequence = 0;
+  var accountIndex = 1;
   var feeAmount = feeStartAmount;
+  var sequence = 0;
+  var totalEVR = 0;
+  var totalXAH = 0;
   if (reputationAccounts.length != 0 ) {
     var allAccounts = accounts.concat(reputationAccounts);
   } else {
@@ -204,19 +207,24 @@ async function monitor_balance(){
   console.log(" ------- ");
 
   for (const account of allAccounts) {
-
     const { account_data } = await client.send({ command: "account_info", account: account });
     var sourceData = await client.send({ command: "account_info", account: sourceAccount });
     var sequence = sourceData.account_data.Sequence;
 
     if (account != sourceAccount) {
+      if (reputationAccounts.includes(account)) {
+        var accountType = "reputation account"
+      } else {
+        var accountType = "evernode account";
+        totalEVR = ( totalEVR + ( await GetEvrBalance(account)) );
+      }
       if (Number(account_data?.Balance) < (xah_balance_threshold * 1000000) ) {
         const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-        consoleLog(`${YW}XAH Balance for account ${account} is ${(account_data?.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
+        consoleLog(`${YW}XAH Balance for ${accountType} ${accountIndex}, ${account} is ${(account_data?.Balance / 1000000)}, below threshold of ${xah_balance_threshold}, sending ${xah_refill_amount}XAH${CL}`);
         consoleLog(`Source account XAH balance = ${(sourceData?.account_data?.Balance / 1000000)}`);
         if ((sourceData?.account_data?.Balance / 1000000) < xah_refill_amount) {
           consoleLog(`${RD}Not enough XAH funds in source account to fill other accounts${CL}`);
-          if (!fs.existsSync(filePath)) {
+          if (!fs.existsSync(filePath) && email_notification) {
             await sendMail("Insufficient XAH funds", "We tried to send XAH to " + account + " but the source balance in " + sourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
             fs.writeFileSync(filePath, "Balance is too low");
           }
@@ -251,16 +259,21 @@ async function monitor_balance(){
             tesSUCCESS = false;
             consoleLog(`${RD}XAH refill FAILED TO SEND, ${(xah_refill_amount)} XAH ${sourceAccount} > xx ${account_data.Account} (fee:${xahRefillTx.Fee}), result: ${xahRefillTxResult}${CL}`);
           } else {   
-          consoleLog(`${GN}XAH refill payment sent, ${(xah_refill_amount)} XAH, ${sourceAccount} --> ${account_data.Account} (fee:${xahRefillTx.Fee}), result: ${xahRefillTxResult}${CL}`);
+            consoleLog(`${GN}XAH refill payment sent, ${(xah_refill_amount)} XAH, ${sourceAccount} --> ${account_data.Account} (fee:${xahRefillTx.Fee}), result: ${xahRefillTxResult}${CL}`);
+            totalXAH = ( totalXAH + Number(account_data?.Balance / 1000000) + xah_refill_amount )
           };
 
           if (fs.existsSync(filePath)) fs.rmSync(filePath);
 
         }
       } else {
-        consoleLog(`Balance for account ${account} is ${(account_data?.Balance / 1000000)} above the threshold of ${(xah_balance_threshold)}`);
+        consoleLog(`Balance for ${accountType} ${accountIndex}, ${account} is ${(account_data?.Balance / 1000000)} above the threshold of ${(xah_balance_threshold)}`);
+        totalXAH = ( totalXAH + Number(account_data?.Balance / 1000000) )
       }
+    } else {
+      consoleLog(`account ${accountIndex}, ${account} is the source account, skipping...`)
     }
+    accountIndex++;
     console.log(" ------- ");
   }
   
@@ -270,6 +283,7 @@ async function monitor_balance(){
     console.log("")
     consoleLog("checking EVR levels on " + reputationAccounts.length + " reputation accounts...");
     consoleLog(" ------- ");
+    accountIndex = 1;
     for (const account of reputationAccounts) {
 
       const { account_data } = await client.send({ command: "account_info", account: account });
@@ -283,13 +297,13 @@ async function monitor_balance(){
 
         if (( evrBalance < evr_balance_threshold )) {
           const filePath = path.resolve(__dirname, 'balanceLow-' + account + '.txt');
-          consoleLog(`${YW}EVR balance for ${account} is ${evrBalance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
+          consoleLog(`${YW}EVR balance on reputation account ${accountIndex}, ${account} is ${evrBalance}, below threshold of ${evr_balance_threshold}, sending ${evr_refill_amount} EVR${CL}`);
           
           if (sourceBalance < evr_refill_amount) {
             consoleLog(`${RD}Not enough funds in source account ${sourceAccount} to fill accounts with EVR${CL}`);
             logVerbose("Source Account EVR Balance " + sourceBalance);
             logVerbose("evr_refill_amount =  " + evr_refill_amount);
-            if (!fs.existsSync(filePath)) {
+            if (!fs.existsSync(filePath) && email_notification) {
               await sendMail("Insufficient EVR funds", "We tried to send EVR to " + account + " but the balance in " + sourceAccount + " is too low.\r\n\r\nPlease feed your source account.");
               fs.writeFileSync(filePath, "EVR Balance is too low");
             }
@@ -329,24 +343,29 @@ async function monitor_balance(){
               consoleLog(`${RD}EVR Refill FAILED TO SEND, ${evr_refill_amount} EVR ${sourceAccount} > xx ${account} (fee:${evrRefillTx.Fee}), result: ${evrRefillTxResult}${CL}`);
             } else {   
             consoleLog(`${GN}EVR Refill sent, ${evr_refill_amount} EVR, ${sourceAccount} --> ${account} (fee:${evrRefillTx.Fee}), result: ${evrRefillTxResult}${CL}`);
+            totalEVR = ( totalEVR + evrBalance + evr_refill_amount );
             };
 
             if (fs.existsSync(filePath)) fs.rmSync(filePath);
-
-            sequence++;
-
           }
         } else {
-          consoleLog(`EVR balance for ${account} is ${evrBalance} above the evr_balance_threshold of ${evr_balance_threshold}`);
+          consoleLog(`EVR balance for ${accountType} ${accountIndex}, ${account} is ${evrBalance} above the evr_balance_threshold of ${evr_balance_threshold}`);
+          totalEVR = ( totalEVR + evrBalance );
         }
         
       }
+      accountIndex++;
       consoleLog(" ------- ");
     }
 
   }
   if (tesSUCCESS){
+    var sourceData = await client.send({ command: "account_info", account: sourceAccount });
+    totalXAH = ( totalXAH + (sourceData?.account_data?.Balance / 1000000) )
+    totalEVR = ( totalEVR + (await GetEvrBalance(sourceAccount)) );
     consoleLog(`${GN}all accounts succesfully checked${CL}`)
+    consoleLog(`${GN}your total XAH amount in all accounts = ${totalXAH} XAH${CL}`)
+    consoleLog(`${GN}your total EVR amount in all accounts = ${totalEVR} EVR${CL}`)
     consoleLog(" ---------------- ");
     consoleLog(" ");
     return 0
@@ -377,7 +396,8 @@ async function transfer_funds(){
   logVerbose(`allAccounts --> ${allAccounts}\n`);
 
   for (const account of allAccounts) {
-    consoleLog("start the transferring process on account " + accountIndex + ", " + account);
+    if (reputationAccounts.includes(account)) { var accountType = "reputation account" } else { var accountType = "evernode account" };
+    consoleLog(`start the transferring process on ${accountType} ${accountIndex}, ${account}`);
     accountIndex++;
     if (account != evrDestinationAccount) {
       var { account_data } = await client.send({ command: "account_info", account })
@@ -571,16 +591,16 @@ async function checkAccountHeartBeat(account, accountIndex) {
   if (currentTimestamp - hostInfo.lastHeartbeatIndex > 60 * minutes_from_last_heartbeat_alert_threshold) {
     var faultReason = "heartbeat";
     consoleLog(`${hostInfoSTR}`);
-    consoleLog(`${CROSS}${RD}heartbeat failure detected${CL}`);
+    consoleLog(`${CROSS} ${RD}heartbeat failure detected${CL}`);
   };
   if ((hostInfo.maxInstances < hostMinInstanceCount) || (hostInfo.leaseAmount > hostMaxLeaseAmount) || (hostInfo.hostReputation < hostReputationThreshold)) {
     if ( faultReason == "heartbeat" ) {
       var faultReason = "heatbeat+reputation";
-      consoleLog(`${CROSS}${RD}and reputation fault detected${CL}`);
+      consoleLog(`${CROSS} ${RD}and reputation fault detected${CL}`);
     } else { 
       var faultReason = "reputation"
       consoleLog(`${hostInfoSTR}`);
-      consoleLog(`${CROSS}${YW}reputation fault detected${CL}`);
+      consoleLog(`${CROSS} ${YW}reputation fault detected${CL}`);
     };
   };
 
@@ -1056,7 +1076,7 @@ async function monitor_claimreward(){
     }
 
     if (claimable) {
-      consoleLog(`${GN}account is within a claimable timeframe, rewards will be ${reward}, now attempting a claim...${CL}`);
+      consoleLog(`${GN}account is within a claimable timeframe, rewards will be ${reward} XAH, now attempting a claim...${CL}`);
 
       const { account_data: { Sequence: sequence } } = await client.send({ command: "account_info", account: account });
       var claimTx = {
@@ -1091,23 +1111,23 @@ async function monitor_claimreward(){
         tesSUCCESS = false;
         consoleLog(`${RD}claim failed for ${account} (fee:${claimTx.Fee}), result: ${claimTxResult}${CL}`);
       } else {
-        consoleLog(`${GN}claim success, re-claimed ${reward}${CL}`);
+        consoleLog(`${GN}claim success, re-claimed ${reward} XAH${CL}`);
         total_reward_accumulated += reward;
       }
     } else {
-      consoleLog(`${YW}account is not within a claimable timeframe, next claimable date is in ${claimableTime}${CL}, accumulated rewards so far ${reward}`)
+      consoleLog(`${YW}account is not within a claimable timeframe, next claimable date is in ${claimableTime}${CL}, accumulated rewards so far ${reward} XAH`)
     }
 
     consoleLog(" ---------------- ");
     consoleLog(" ");
   };
   if (tesSUCCESS){
-    consoleLog(`${GN}all accounts succesfully checked, total accumulated rewards are ${total_reward_accumulated}${CL}`)
+    consoleLog(`${GN}all accounts succesfully checked, total accumulated rewards are ${total_reward_accumulated} XAH${CL}`)
     consoleLog(" ---------------- ");
     consoleLog(" ");
     return 0
   } else {
-    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more, total accumulated rewards this cycle ${total_reward_accumulated}${CL}`)
+    consoleLog(`${RD}there was a fault in querying 1 or more accounts, scroll up to find out more, total accumulated rewards this cycle ${total_reward_accumulated} XAH${CL}`)
     consoleLog(" ---------------- ");
     consoleLog(" ");
     return 1
