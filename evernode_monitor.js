@@ -3,13 +3,12 @@ const lib = require('xrpl-accountlib');
 const { decode } = require('xrpl-binary-codec-prerelease');
 const { exit } = require('process');
 const { createTransport } = require('nodemailer');
-const { ALPN_ENABLED } = require('constants');
+//const { ALPN_ENABLED } = require('constants');
 const { Console } = require('console');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '.env') });
-
 
 // log/console setup  ......................................................................
 const verboseLog = process.env.verboseLog === 'true' ? true : false;
@@ -87,7 +86,7 @@ async function networkSetup(){
   heartbeatClient = await evernode.HookClientFactory.create(evernode.HookTypes.heartbeat);
 }
 
-// Norification setup  ......................................................................
+// Notification setup  ...................................................................
 
 const myDate = new Date().toUTCString();
 
@@ -361,11 +360,11 @@ async function monitor_balance(){
   }
   if (tesSUCCESS){
     var sourceData = await client.send({ command: "account_info", account: sourceAccount });
-    totalXAH = ( totalXAH + (sourceData?.account_data?.Balance / 1000000) )
-    totalEVR = ( totalEVR + (await GetEvrBalance(sourceAccount)) );
-    consoleLog(`${GN}all accounts succesfully checked${CL}`)
-    consoleLog(`${GN}your total XAH amount in all accounts = ${totalXAH} XAH${CL}`)
-    consoleLog(`${GN}your total EVR amount in all accounts = ${totalEVR} EVR${CL}`)
+    totalXAH = (totalXAH+(sourceData?.account_data?.Balance/1000000));
+    totalEVR = (totalEVR+(await GetEvrBalance(sourceAccount)));
+    consoleLog(`${GN}all accounts succesfully checked${CL}`);
+    consoleLog(`${GN}your total XAH amount in all accounts = ${totalXAH.toFixed(4)} XAH${CL}`);
+    consoleLog(`${GN}your total EVR amount in all accounts = ${totalEVR.toFixed(4)} EVR${CL}`);
     consoleLog(" ---------------- ");
     consoleLog(" ");
     return 0
@@ -1152,11 +1151,11 @@ async function GetEvrBalance(account){
       if (t.currency == "EVR" && t.account == trustlineAddress) {
         balance = Number(balance) + Number(t.balance);
         logVerbose(`found matching trustline of ${trustlineAddress} with balance of ${balance}, full reply -> ${JSON.stringify(t)}`)
-        return isNaN(balance) ? 0 : balance;
+        return isNaN(Number(balance)) ? 0 : Number(balance);
       }
     })
   }
-  return isNaN(Number(balance)) ? 0 : balance;
+  return isNaN(Number(balance)) ? 0 : Number(balance);
 }
 
 // .env file handling  ........................................................................................................................................................................

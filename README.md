@@ -1,6 +1,6 @@
 # Evernode monitor
 
-This nodejs script will help you in the monitoring and managing all of your evernodes accounts (including reputation accounts).
+This nodejs script will help you in the monitoring and managing all of your evernodes accounts (including reputation accounts). 
 
 this fork adds;
     wallet_setup module,
@@ -17,9 +17,9 @@ It is made of 5 modules, heres a overview, with links to a more detailed descrip
 ---
 
 - [How to install](#how-to-install)
-    - [Wallet Management](#1-wallet-management)
+    - [Wallet Management](#1st-wallet-management)
         - [Proxmox, and Evernode Deploy Script](#proxmox)
-    - [or Manually](#2-manually)
+    - [or Manually](#2nd-manually)
 - [MONITOR MODULES](#monitor-modules)
     - [1 wallet_setup](#1-wallet_setup) used to setup new un-activated wallets, so they are fully ready for evernode install (activating, settng trustline, sending EVR, settng regularkey, and will also push data to .env file)
     - [2 transfer_funds](#2-transfer_funds) Move all EVR/XAH from your node accounts to source account.
@@ -32,13 +32,13 @@ It is made of 5 modules, heres a overview, with links to a more detailed descrip
 
 There are TWO main ways to run this;
 
-## 1 Wallet Management
+## 1st Wallet Management
 
-first is the easy way, this is using my wallet management "GUI", this checks and pulls all the needed dependencies  (like this repo and any needed packages like node, curl and so on)
+first and by far the easiest way, is using my wallet management "GUI", this checks and pulls all the needed dependencies  (like this repo and any needed packages like node, curl and so on)
 
 ![Wallet Management](walletManagement.png)
 
-its very simple and before it runs any module gives you a overview, and settings checker window .. 
+its very simple and before it runs any module gives you a overview window with info, helpful tips, and a settings checker.
 
 you run it with this one simple command .. 
 
@@ -59,7 +59,7 @@ and when run under proxmox, you get options of wallet management (as above), eve
 evernode deployment will use the key_pair.txt and key_pair_rep.txt files to create CT for xahau node, VMs for evernodes, and fully deploying them.
 including carrying out a transfer if needed to, adding their entry to NginxProxManager all within one easy to follow script.
 
-## 2 manually
+## 2nd Manually
 
 First you need to ensure you have the latest version of node.js (min requires v20.11.1) in your server (https://github.com/nodesource/distributions)
 

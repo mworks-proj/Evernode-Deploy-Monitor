@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.4
+ver=1.5
 
 ###################################################################################
 # message functions for script
@@ -62,7 +62,7 @@ set -Eeuo pipefail
 trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
 trap cleanup EXIT
 function error_handler() {
-  clear
+  # clear
   if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID > /dev/null; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
   local exit_code="$?"
   local line_number="$1"
@@ -180,33 +180,43 @@ function check_for_needed_program_installs() {
 
   if ! command -v node &> /dev/null; then
     msg_info_ "installing nodejs...                                                                                  "
-    apt update >/dev/null 2>&1
-    apt install -y nodejs 2>&1 | awk '{ printf "\r\033[K   installing nodejs.."; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get install -y ca-certificates curl gnupg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      mkdir -p /etc/apt/keyrings | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+
+      NODE_MAJOR=20
+      echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get -y install nodejs | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
     msg_ok "nodejs installed."
   else
     NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d. -f1)
     if [ "$NODE_VERSION" -lt 20 ]; then
-      msg_info_ "installing npm...                                                                                  "
-      curl -fsSL https://fnm.vercel.app/install | bash > /dev/null | awk '{ printf "\r\033[K   installing npm.."; printf "%s", $0; fflush() }'
-      FNM_PATH="/root/.local/share/fnm"
-      if [ -d "$FNM_PATH" ]; then
-        export PATH="$FNM_PATH:$PATH"
-        eval "`fnm env`"
-      fi
-      fnm use --install-if-missing 20  2>&1 | awk '{ printf "\r\033[K   installing npm.. "; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get install -y ca-certificates curl gnupg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      mkdir -p /etc/apt/keyrings | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+
+      NODE_MAJOR=20
+      echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get -y install nodejs | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
       msg_ok "nodejs updated to newest."
     fi
   fi
 
   if ! command -v npm &> /dev/null; then
     msg_info_ "installing npm...                                                                                  "
-    curl -fsSL https://fnm.vercel.app/install | bash > /dev/null | awk '{ printf "\r\033[K   installing npm.. "; printf "%s", $0; fflush() }'
-    FNM_PATH="/root/.local/share/fnm"
-    if [ -d "$FNM_PATH" ]; then
-      export PATH="$FNM_PATH:$PATH"
-      eval "`fnm env`"
-    fi
-    fnm use --install-if-missing 20  2>&1 | awk '{ printf "\r\033[K   installing npm.. "; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get install -y ca-certificates curl gnupg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      mkdir -p /etc/apt/keyrings | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+
+      NODE_MAJOR=20
+      echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get update | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
+      apt-get -y install nodejs | awk '{ printf "\r\033[K   installing node.. "; printf "%s", $0; fflush() }'
     msg_ok "npm installed, needs loging out and back in to take effect"
   fi
 
@@ -306,7 +316,7 @@ or 0 to skip (giving you access to manager)" 14 72 "3" --title "evernode count" 
           fi
           while true; do
             # Run the node testnet wallet generator, and capture address seed to key_pair.txt
-            if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count= 0; fi
+            if [ -s "$keypair_file" ]; then key_pair_count=$(grep -c '^Address' "$keypair_file"); else key_pair_count="0"; fi
             if [[ $NUM_VMS -gt $key_pair_count ]]; then
               msg_info_ "generating keypairs, total so far $key_pair_count of $NUM_VMS (attempt $attempt, CTRL+C to exit !)         "
               node $TEMP_DIR/test-account-generator.js  2>/dev/null | extract_json_add_to_file 2>/dev/null || msg_info_ "timed out generating number $(( key_pair_count + 1 )), waiting a bit then trying again (we are on attempt $attempt)   ";  sleep 20; attempt=$((attempt + 1)); continue
@@ -861,7 +871,7 @@ Do you want to use the above settings to check \"$total_accounts\" account regis
 
 Do you want to use the above settings to install monitor?" 32 104; then
           clear
-          existing_crontab=$(crontab -l 2>/dev/null)
+          existing_crontab=$(crontab -l 2>/dev/null) || echo ""
           cronjob_main="* */$cronjob_main_hours * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js"
           cronjob_heartbeat="*/$cronjob_heartbeat_mins * * * * . $HOME/.bashrc && node /root/evernode-deploy-monitor/evernode_monitor.js monitor_heartbeat"
           if crontab -l | grep -q "/usr/bin/node /root/evernode-deploy-monitor/evernode_monitor.js"; then
@@ -1165,7 +1175,7 @@ function update_script() {
 
 ###################################################################################
 function evernode_deploy_script() {
-  ENTRY_STRING=$(curl -s $gadget_encrypt | base64 | tr '+/' '-_' | tr -d '=' )
+  export ENTRY_STRING=$(curl -s $gadget_encrypt | base64 | tr '+/' '-_' | tr -d '=' )
   DEPLOY_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://deploy.zerp.network/$ENTRY_STRING.sh)
   if curl -s -f "https://deploy.zerp.network" > /dev/null; then
     if [ "$DEPLOY_STATUS" == "403" ]; then
