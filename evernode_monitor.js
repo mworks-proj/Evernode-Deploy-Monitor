@@ -360,8 +360,10 @@ async function monitor_balance(){
   }
   if (tesSUCCESS){
     var sourceData = await client.send({ command: "account_info", account: sourceAccount });
-    totalXAH = (totalXAH+(sourceData?.account_data?.Balance/1000000));
-    totalEVR = (totalEVR+(await GetEvrBalance(sourceAccount)));
+    let XAHsourceBalance = sourceData?.account_data?.Balance ?? 0;
+    totalXAH = Number(totalXAH+(XAHsourceBalance/1000000));
+    totalEVR = Number(totalEVR+(await GetEvrBalance(sourceAccount)));
+    logVerbose(`${XAHsourceBalance} -- ${totalXAH} -- ${totalEVR} -- `);
     consoleLog(`${GN}all accounts succesfully checked${CL}`);
     consoleLog(`${GN}your total XAH amount in all accounts = ${totalXAH.toFixed(4)} XAH${CL}`);
     consoleLog(`${GN}your total EVR amount in all accounts = ${totalEVR.toFixed(4)} EVR${CL}`);
