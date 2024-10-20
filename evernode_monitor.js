@@ -131,8 +131,9 @@ async function getAccounts() {
       accounts = await accountsdata.match(/Address:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
       account_seeds = await accountsdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
     } catch (err) {
-      console.error(`Error reading ${key_pair} file:`);
-      logVerbose("error returned ->" + err)
+      console.error(`Error reading ${keypair_file} file:`);
+
+      logVerbose(`error returned ->${err}`)
     }
     try {
       consoleLog(`and ${keypair_rep_file} for reputation account pairs`);
@@ -141,21 +142,21 @@ async function getAccounts() {
       reputationaccount_seeds = await repdata.match(/Seed:\s([a-zA-Z0-9]+)/g).map(match => match.split(' ')[1]);
     } catch (err) {
       console.error(`Error reading ${keypair_rep_file} file:`);
-      logVerbose("error returned ->" + err)
+      logVerbose(`error returned ->${err}`)
     }
-    consoleLog("number of accounts found = " + accounts.length);
-    consoleLog("number of reputationAccounts found = " + reputationAccounts.length);
+    consoleLog(`number of accounts found = ${accounts.length}`);
+    consoleLog(`number of reputationAccounts found = ${reputationAccounts.length}`);
     logVerbose(`account strings -->${accounts},\n and reputation accounts -->${reputationAccounts}`);
     logVerbose(`seed strings -->${account_seeds},\n and reputation seeds -->${reputationaccount_seeds}`);
     sourceAccount = accounts[0];
     evrDestinationAccount = accounts[0];
     evrDestinationAccountTag = "";
     try {
-      var secret = account_seeds[0];
+      const secret = account_seeds[0];
       keypair = lib.derive.familySeed(secret);
     } catch (err) {
-      console.error(`Error reading secret from source account`);
-      logVerbose("error returned ->" + err)
+      console.error("Error reading secret from source account");
+      logVerbose(`error returned ->${err}`)
     }
 
   } else {

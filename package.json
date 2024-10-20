@@ -1,8 +1,9 @@
 {
     "dependencies": {
-        "dotenv": "^16.4.1",
-        "nodemailer": "^6.9.12",
-        "xrpl-accountlib": "^3.2.9",
-        "xrpl-client": "^2.3.1"
+        "dotenv": "^16.4.5",
+        "evernode-js-client": "^0.6.60",
+        "nodemailer": "^6.9.15",
+        "xrpl-accountlib": "^3.6.3",
+        "xrpl-client": "^2.4.0"
     }
 }
